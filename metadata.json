@@ -1,0 +1,6 @@
+{
+  "name": "MeetTask AI",
+  "description": "AI-powered meeting assistant that converts speech to text, detects tasks automatically, and tracks progress.",
+  "requestFramePermissions": ["microphone"],
+  "prompt": ""
+}
