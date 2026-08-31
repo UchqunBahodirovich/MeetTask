@@ -1,130 +1,346 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { Sidebar, Header } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { LiveMeeting } from './pages/LiveMeeting';
 import { MeetingSummary } from './pages/MeetingSummary';
 import { TasksPage } from './pages/Tasks';
+import { MeetingsPage } from './pages/Meetings';
+import { CalendarPage } from './pages/Calendar';
 import { AuthPage } from './pages/Auth';
-import { MOCK_MEETINGS, MOCK_USERS } from './constants';
-import { Meeting, Task } from './types';
+import { TaskFormModal } from './components/TaskFormModal';
+import { MeetingFormModal } from './components/MeetingFormModal';
+import { SettingsModal } from './components/SettingsModal';
+import { TeamModal } from './components/TeamModal';
+import { UploadRecordingModal } from './components/UploadRecordingModal';
+import { ConfirmDialog } from './components/ui/ConfirmDialog';
+import { usePersistentState } from './hooks/usePersistentState';
+import { CURRENT_USER, DEFAULT_SETTINGS, MOCK_MEETINGS, MOCK_USERS } from './constants';
+import { AppSettings, Meeting, MeetingAnalysis, Task, TaskStatus, User } from './types';
+import { TeamProvider } from './context/TeamContext';
+import { I18nProvider, getCatalogue } from './i18n';
 import './index.css';
 
+const STORAGE_KEYS = {
+  meetings: 'meettask.meetings',
+  tasks: 'meettask.tasks',
+  settings: 'meettask.settings',
+  team: 'meettask.team',
+  auth: 'meettask.auth',
+  notifications: 'meettask.readNotifications',
+};
+
+const initialTasks = () => MOCK_MEETINGS.flatMap((m) => m.tasks || []);
+
+interface TaskModalState {
+  open: boolean;
+  task: Task | null;
+  defaultStatus?: TaskStatus;
+  defaultMeetingId?: string;
+}
+
 const App: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = usePersistentState<boolean>(STORAGE_KEYS.auth, false);
+  const [meetings, setMeetings] = usePersistentState<Meeting[]>(STORAGE_KEYS.meetings, MOCK_MEETINGS);
+  const [allTasks, setAllTasks] = usePersistentState<Task[]>(STORAGE_KEYS.tasks, initialTasks);
+  const [settings, setSettings] = usePersistentState<AppSettings>(STORAGE_KEYS.settings, DEFAULT_SETTINGS);
+  const [team, setTeam] = usePersistentState<User[]>(STORAGE_KEYS.team, MOCK_USERS);
+  // This component sits above I18nProvider, so it reads the catalogue directly.
+  const t = getCatalogue(settings.language);
+
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [currentMeeting, setCurrentMeeting] = useState<Meeting | null>(null);
   const [view, setView] = useState<'main' | 'live' | 'summary'>('main');
-  
-  // Flatten all tasks from meetings for the tasks page
-  const [allTasks, setAllTasks] = useState<Task[]>(
-    MOCK_MEETINGS.flatMap(m => m.tasks || [])
+  const [currentMeetingId, setCurrentMeetingId] = useState<string | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [focusedTaskId, setFocusedTaskId] = useState<string>('');
+
+  const [taskModal, setTaskModal] = useState<TaskModalState>({ open: false, task: null });
+  const [meetingModalOpen, setMeetingModalOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [teamOpen, setTeamOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+
+  // Derived from `meetings` so edits to a meeting flow into the open view.
+  const currentMeeting = useMemo(
+    () => meetings.find((m) => m.id === currentMeetingId) ?? null,
+    [meetings, currentMeetingId],
   );
 
+  const goToTab = (tab: string) => {
+    setActiveTab(tab);
+    setView('main');
+  };
+
   const handleMeetingClick = (meeting: Meeting) => {
-    setCurrentMeeting(meeting);
-    if (meeting.status === 'live') {
+    setCurrentMeetingId(meeting.id);
+    setView(meeting.status === 'completed' ? 'summary' : 'live');
+  };
+
+  const handleEndMeeting: React.ComponentProps<typeof LiveMeeting>['onEnd'] = ({
+    transcript,
+    analysis,
+    tasks,
+  }) => {
+    if (!currentMeeting) return;
+    const updated: Meeting = {
+      ...currentMeeting,
+      status: 'completed',
+      transcript,
+      tasks,
+      summary: analysis?.summary || 'Meeting completed. No analyzable speech was recorded.',
+      keyPoints: analysis?.keyPoints || [],
+      decisions: analysis?.decisions || [],
+    };
+    setMeetings((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+    setAllTasks((existing) => [...tasks, ...existing]);
+    setView('summary');
+  };
+
+  const handleTaskMove = (taskId: string, status: TaskStatus, beforeTaskId?: string) => {
+    setAllTasks((existing) => {
+      const moving = existing.find((t) => t.id === taskId);
+      if (!moving) return existing;
+      const moved: Task = { ...moving, status };
+      const rest = existing.filter((t) => t.id !== taskId);
+      const insertAt = beforeTaskId ? rest.findIndex((t) => t.id === beforeTaskId) : -1;
+      if (insertAt === -1) return [...rest, moved];
+      return [...rest.slice(0, insertAt), moved, ...rest.slice(insertAt)];
+    });
+  };
+
+  const handleTaskApprove = (taskId: string) =>
+    setAllTasks((existing) => existing.map((t) => (t.id === taskId ? { ...t, isApproved: true } : t)));
+
+  const handleTaskSave = (task: Task) =>
+    setAllTasks((existing) =>
+      existing.some((t) => t.id === task.id)
+        ? existing.map((t) => (t.id === task.id ? task : t))
+        : [task, ...existing],
+    );
+
+  const handleTaskDelete = (taskId: string) =>
+    setAllTasks((existing) => existing.filter((t) => t.id !== taskId));
+
+  const openTaskModal = (state: Omit<TaskModalState, 'open'>) => setTaskModal({ ...state, open: true });
+
+  const handleMeetingSave = (meeting: Meeting, startNow: boolean) => {
+    setMeetings((prev) => [meeting, ...prev]);
+    setCurrentMeetingId(meeting.id);
+    if (startNow) {
       setView('live');
-    } else if (meeting.status === 'completed') {
-      setView('summary');
     } else {
-      // For upcoming, maybe just show details or start it
-      setView('live');
+      setView('main');
+      setActiveTab('meetings');
     }
   };
 
-  const handleEndMeeting = () => {
-    if (currentMeeting) {
-      const updatedMeeting: Meeting = {
-        ...currentMeeting,
-        status: 'completed',
-        summary: 'The meeting concluded with several key action items identified for the team.',
-      };
-      setCurrentMeeting(updatedMeeting);
-      setView('summary');
+  /** A transcribed upload becomes a completed meeting plus its extracted tasks. */
+  const handleUploadComplete = (meeting: Meeting, tasks: Task[]) => {
+    setMeetings((prev) => [meeting, ...prev]);
+    setAllTasks((prev) => [...tasks, ...prev]);
+    setCurrentMeetingId(meeting.id);
+    setView('summary');
+  };
+
+  /**
+   * Re-analysis replaces everything the assistant produced for a meeting.
+   * Tasks a person typed by hand are kept — the analysis never created them.
+   */
+  const handleMeetingReanalyzed = (analysis: MeetingAnalysis, tasks: Task[]) => {
+    if (!currentMeeting) return;
+    const meetingId = currentMeeting.id;
+    setMeetings((prev) =>
+      prev.map((meeting) =>
+        meeting.id === meetingId
+          ? {
+              ...meeting,
+              summary: analysis.summary || meeting.summary,
+              keyPoints: analysis.keyPoints,
+              decisions: analysis.decisions,
+              tasks,
+            }
+          : meeting,
+      ),
+    );
+    setAllTasks((prev) => [
+      ...tasks,
+      ...prev.filter((task) => !(task.meetingId === meetingId && task.isAiGenerated)),
+    ]);
+  };
+
+  const handleSelectTaskFromSearch = (task: Task) => {
+    goToTab('tasks');
+    setFocusedTaskId(task.id);
+    window.setTimeout(() => setFocusedTaskId((id) => (id === task.id ? '' : id)), 2500);
+  };
+
+  const handleResetData = () => {
+    setMeetings(MOCK_MEETINGS);
+    setAllTasks(initialTasks());
+    setSettings(DEFAULT_SETTINGS);
+    setTeam(MOCK_USERS);
+    try {
+      window.localStorage.removeItem(STORAGE_KEYS.notifications);
+    } catch {
+      /* storage may be unavailable */
     }
+    setResetOpen(false);
+    setSettingsOpen(false);
+    setView('main');
+    setCurrentMeetingId(null);
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setView('main');
+    setActiveTab('dashboard');
+    setCurrentMeetingId(null);
+    setIsSidebarOpen(false);
   };
 
   if (!isAuthenticated) {
-    return <AuthPage onLogin={() => setIsAuthenticated(true)} />;
+    return (
+      <I18nProvider language={settings.language}>
+        <AuthPage onLogin={() => setIsAuthenticated(true)} />
+      </I18nProvider>
+    );
   }
 
   return (
+    <I18nProvider language={settings.language}>
+    <TeamProvider team={team}>
     <div className="flex min-h-screen bg-slate-50">
-      <Sidebar activeTab={activeTab} onTabChange={(tab) => {
-        setActiveTab(tab);
-        setView('main');
-      }} />
-      
+      <Sidebar
+        activeTab={activeTab}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        onTabChange={goToTab}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onLogout={handleLogout}
+      />
+
       <div className="flex-1 flex flex-col min-w-0">
-        <Header />
-        
-        <main className="flex-1 p-8 overflow-y-auto">
+        <Header
+          onMenuClick={() => setIsSidebarOpen(true)}
+          meetings={meetings}
+          tasks={allTasks}
+          settings={settings}
+          avatar={CURRENT_USER.avatar}
+          onNewMeeting={() => setMeetingModalOpen(true)}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onLogout={handleLogout}
+          onSelectMeeting={handleMeetingClick}
+          onSelectTask={handleSelectTaskFromSearch}
+        />
+
+        <main className="flex-1 p-4 md:p-8 overflow-y-auto">
           {view === 'live' && currentMeeting ? (
-            <LiveMeeting 
-              meeting={currentMeeting} 
-              onEnd={handleEndMeeting} 
-            />
+            <LiveMeeting meeting={currentMeeting} onEnd={handleEndMeeting} />
           ) : view === 'summary' && currentMeeting ? (
-            <MeetingSummary 
-              meeting={currentMeeting} 
-              onBack={() => setView('main')} 
+            <MeetingSummary
+              meeting={currentMeeting}
+              tasks={allTasks.filter((t) => t.meetingId === currentMeeting.id)}
+              onBack={() => setView('main')}
+              onApproveTask={handleTaskApprove}
+              onEditTask={(task) => openTaskModal({ task })}
+              onAddTask={() => openTaskModal({ task: null, defaultMeetingId: currentMeeting.id })}
+              onReanalyzed={handleMeetingReanalyzed}
             />
           ) : (
             <>
               {activeTab === 'dashboard' && (
-                <Dashboard 
-                  meetings={MOCK_MEETINGS} 
+                <Dashboard
+                  meetings={meetings}
                   tasks={allTasks}
+                  displayName={settings.displayName}
                   onMeetingClick={handleMeetingClick}
+                  onTaskApprove={handleTaskApprove}
+                  onEditTask={(task) => openTaskModal({ task })}
+                  onViewAllMeetings={() => goToTab('meetings')}
+                  onNewMeeting={() => setMeetingModalOpen(true)}
                 />
               )}
               {activeTab === 'meetings' && (
-                <div className="space-y-6">
-                  <h1 className="text-3xl font-bold text-slate-900">Meetings</h1>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {MOCK_MEETINGS.map(m => (
-                      <div key={m.id} onClick={() => handleMeetingClick(m)} className="cursor-pointer">
-                        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all">
-                          <div className="flex justify-between items-start mb-4">
-                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
-                              m.status === 'completed' ? 'bg-slate-100 text-slate-600' : 
-                              m.status === 'live' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
-                            }`}>
-                              {m.status}
-                            </span>
-                            <span className="text-xs text-slate-400 font-medium">{m.duration}</span>
-                          </div>
-                          <h3 className="font-bold text-slate-900 mb-2">{m.title}</h3>
-                          <p className="text-sm text-slate-500 mb-4">{new Date(m.date).toLocaleDateString()}</p>
-                          <div className="flex -space-x-2">
-                            {m.participants.map((p, i) => (
-                              <img key={i} src={p.avatar} className="w-8 h-8 rounded-full border-2 border-white" alt="" />
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <MeetingsPage
+                  meetings={meetings}
+                  onMeetingClick={handleMeetingClick}
+                  onNewMeeting={() => setMeetingModalOpen(true)}
+                  onUploadRecording={() => setUploadOpen(true)}
+                />
               )}
               {activeTab === 'tasks' && (
-                <TasksPage tasks={allTasks} />
+                <TasksPage
+                  tasks={allTasks}
+                  meetings={meetings}
+                  defaultView={settings.defaultTaskView}
+                  focusedTaskId={focusedTaskId}
+                  onTaskMove={handleTaskMove}
+                  onTaskApprove={handleTaskApprove}
+                  onCreateTask={(status) => openTaskModal({ task: null, defaultStatus: status })}
+                  onEditTask={(task) => openTaskModal({ task })}
+                  onDeleteTask={handleTaskDelete}
+                />
               )}
               {activeTab === 'calendar' && (
-                <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-4">
-                  <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center">
-                    <span className="text-4xl">📅</span>
-                  </div>
-                  <h2 className="text-xl font-bold text-slate-900">Calendar View</h2>
-                  <p className="max-w-xs text-center">Your meeting schedule integrated with your tasks. Coming soon.</p>
-                </div>
+                <CalendarPage
+                  meetings={meetings}
+                  tasks={allTasks}
+                  onMeetingClick={handleMeetingClick}
+                  onTaskClick={(task) => openTaskModal({ task })}
+                  onNewMeeting={() => setMeetingModalOpen(true)}
+                  onUploadRecording={() => setUploadOpen(true)}
+                />
               )}
             </>
           )}
         </main>
       </div>
+
+      <TaskFormModal
+        open={taskModal.open}
+        task={taskModal.task}
+        defaultStatus={taskModal.defaultStatus}
+        defaultMeetingId={taskModal.defaultMeetingId}
+        meetings={meetings}
+        onClose={() => setTaskModal({ open: false, task: null })}
+        onSave={handleTaskSave}
+      />
+
+      <MeetingFormModal
+        open={meetingModalOpen}
+        onClose={() => setMeetingModalOpen(false)}
+        onSave={handleMeetingSave}
+      />
+
+      <UploadRecordingModal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onComplete={handleUploadComplete}
+      />
+
+      <SettingsModal
+        open={settingsOpen}
+        settings={settings}
+        onClose={() => setSettingsOpen(false)}
+        onSave={setSettings}
+        onResetData={() => setResetOpen(true)}
+        onManageTeam={() => setTeamOpen(true)}
+      />
+
+      <TeamModal open={teamOpen} team={team} onClose={() => setTeamOpen(false)} onSave={setTeam} />
+
+      <ConfirmDialog
+        open={resetOpen}
+        title={t.settings.resetTitle}
+        message={t.settings.resetMessage}
+        confirmLabel={t.settings.reset}
+        onCancel={() => setResetOpen(false)}
+        onConfirm={handleResetData}
+      />
     </div>
+    </TeamProvider>
+    </I18nProvider>
   );
 };
 

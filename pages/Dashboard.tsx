@@ -1,73 +1,133 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { format } from 'date-fns';
 import { Meeting, Task } from '../types';
 import { MeetingCard } from '../components/MeetingCard';
 import { TaskCard } from '../components/TaskCard';
-import { 
-  TrendingUp, 
-  Users, 
-  Clock, 
-  CheckCircle2,
-  ArrowUpRight
-} from 'lucide-react';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import { useI18n } from '../i18n';
+import { TrendingUp, Users, Clock, CheckCircle2, ArrowUpRight, Plus } from 'lucide-react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
-  Cell
+  Cell,
 } from 'recharts';
 
 interface DashboardProps {
   meetings: Meeting[];
   tasks: Task[];
+  displayName: string;
   onMeetingClick: (meeting: Meeting) => void;
+  onTaskApprove: (taskId: string) => void;
+  onEditTask: (task: Task) => void;
+  onViewAllMeetings: () => void;
+  onNewMeeting: () => void;
 }
 
-const data = [
-  { name: 'Mon', tasks: 4 },
-  { name: 'Tue', tasks: 7 },
-  { name: 'Wed', tasks: 5 },
-  { name: 'Thu', tasks: 12 },
-  { name: 'Fri', tasks: 8 },
-];
+/** Durations are stored as free text ("45 min", "1h 30m"); pull whatever minutes we can find. */
+const durationToMinutes = (duration: string): number => {
+  const hours = /(\d+(?:\.\d+)?)\s*h/i.exec(duration);
+  const minutes = /(\d+)\s*m/i.exec(duration);
+  if (!hours && !minutes) {
+    const bare = /(\d+)/.exec(duration);
+    return bare ? Number(bare[1]) : 0;
+  }
+  return (hours ? Number(hours[1]) * 60 : 0) + (minutes ? Number(minutes[1]) : 0);
+};
 
-export const Dashboard: React.FC<DashboardProps> = ({ meetings, tasks, onMeetingClick }) => {
+export const Dashboard: React.FC<DashboardProps> = ({
+  meetings,
+  tasks,
+  displayName,
+  onMeetingClick,
+  onTaskApprove,
+  onEditTask,
+  onViewAllMeetings,
+  onNewMeeting,
+}) => {
+  const { t, dateLocale } = useI18n();
+  const upcomingMeetings = meetings.filter((m) => m.status === 'upcoming');
+  const pastMeetings = meetings.filter((m) => m.status === 'completed');
+  const pendingTasks = tasks.filter((t) => !t.isApproved && t.isAiGenerated);
+  const completedTasks = tasks.filter((t) => t.status === 'completed');
+  const aiTasks = tasks.filter((t) => t.isAiGenerated);
+
+  const totalMinutes = meetings
+    .filter((m) => m.status === 'completed')
+    .reduce((sum, m) => sum + durationToMinutes(m.duration), 0);
+
+  const aiShare = tasks.length ? Math.round((aiTasks.length / tasks.length) * 100) : 0;
+
   const stats = [
-    { label: 'Total Meetings', value: '24', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Tasks Completed', value: '142', icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50' },
-    { label: 'Meeting Hours', value: '12.5h', icon: Clock, color: 'text-purple-600', bg: 'bg-purple-50' },
-    { label: 'AI Efficiency', value: '+24%', icon: TrendingUp, color: 'text-orange-600', bg: 'bg-orange-50' },
+    {
+      label: t.dashboard.totalMeetings,
+      value: String(meetings.length),
+      hint: t.dashboard.upcomingCount(upcomingMeetings.length),
+      icon: Users,
+      color: 'text-blue-600',
+      bg: 'bg-blue-50',
+    },
+    {
+      label: t.dashboard.tasksCompleted,
+      value: String(completedTasks.length),
+      hint: t.dashboard.totalCount(tasks.length),
+      icon: CheckCircle2,
+      color: 'text-green-600',
+      bg: 'bg-green-50',
+    },
+    {
+      label: t.dashboard.meetingHours,
+      value: `${(totalMinutes / 60).toFixed(1)}h`,
+      hint: t.dashboard.recordedCount(pastMeetings.length),
+      icon: Clock,
+      color: 'text-purple-600',
+      bg: 'bg-purple-50',
+    },
+    {
+      label: t.dashboard.aiExtracted,
+      value: `${aiShare}%`,
+      hint: t.dashboard.awaitingReview(pendingTasks.length),
+      icon: TrendingUp,
+      color: 'text-orange-600',
+      bg: 'bg-orange-50',
+    },
   ];
 
-  const upcomingMeetings = meetings.filter(m => m.status === 'upcoming');
-  const pastMeetings = meetings.filter(m => m.status === 'completed');
-  const pendingTasks = tasks.filter(t => !t.isApproved && t.isAiGenerated);
+  const chartData = useMemo(
+    () => [
+      { name: t.status.todo, tasks: tasks.filter((task) => task.status === 'todo').length, fill: '#94a3b8' },
+      { name: t.status['in-progress'], tasks: tasks.filter((task) => task.status === 'in-progress').length, fill: '#3b82f6' },
+      { name: t.status.review, tasks: tasks.filter((task) => task.status === 'review').length, fill: '#f97316' },
+      { name: t.status.completed, tasks: completedTasks.length, fill: '#22c55e' },
+    ],
+    [tasks, completedTasks.length, t],
+  );
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex justify-between items-end">
+    <div className="space-y-8 animate-fade-up">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Welcome back, Alex</h1>
-          <p className="text-slate-500 mt-1">Here's what's happening with your meetings today.</p>
+          <h1 className="text-3xl font-bold text-slate-900">{t.dashboard.welcome(displayName.split(' ')[0])}</h1>
+          <p className="text-slate-500 mt-1">{t.dashboard.subtitle}</p>
         </div>
-        <div className="text-right">
-          <p className="text-sm font-medium text-slate-400">Wednesday, March 20</p>
-        </div>
+        <p className="text-sm font-medium text-slate-400">{format(new Date(), 'EEEE, MMMM d', { locale: dateLocale })}</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, i) => (
-          <div key={i} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all">
+        {stats.map((stat) => (
+          <div
+            key={stat.label}
+            className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all"
+          >
             <div className="flex items-center justify-between mb-4">
               <div className={`${stat.bg} ${stat.color} p-2.5 rounded-xl`}>
                 <stat.icon className="w-5 h-5" />
               </div>
-              <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full flex items-center gap-1">
-                <ArrowUpRight className="w-3 h-3" />
-                12%
+              <span className="text-xs font-semibold text-slate-500 bg-slate-50 px-2 py-1 rounded-full">
+                {stat.hint}
               </span>
             </div>
             <p className="text-sm font-medium text-slate-500">{stat.label}</p>
@@ -80,16 +140,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ meetings, tasks, onMeeting
         <div className="lg:col-span-2 space-y-8">
           <section>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-slate-900">Upcoming Meetings</h2>
-              <button className="text-sm font-semibold text-blue-600 hover:text-blue-700">View all</button>
+              <h2 className="text-lg font-bold text-slate-900">{t.dashboard.upcomingMeetings}</h2>
+              <button
+                type="button"
+                onClick={onViewAllMeetings}
+                className="text-sm font-semibold text-blue-600 hover:text-blue-700"
+              >
+                {t.dashboard.viewAll}
+              </button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {upcomingMeetings.map(m => (
+              {upcomingMeetings.map((m) => (
                 <MeetingCard key={m.id} meeting={m} onClick={() => onMeetingClick(m)} />
               ))}
               {upcomingMeetings.length === 0 && (
-                <div className="col-span-2 py-12 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-                  <p className="text-slate-400 font-medium">No upcoming meetings scheduled</p>
+                <div className="md:col-span-2 py-12 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                  <p className="text-slate-400 font-medium">{t.dashboard.noUpcoming}</p>
+                  <button
+                    type="button"
+                    onClick={onNewMeeting}
+                    className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                  >
+                    <Plus className="w-4 h-4" />
+                    {t.dashboard.scheduleOne}
+                  </button>
                 </div>
               )}
             </div>
@@ -97,37 +171,38 @@ export const Dashboard: React.FC<DashboardProps> = ({ meetings, tasks, onMeeting
 
           <section>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-slate-900">Task Activity</h2>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                  <span className="text-xs text-slate-500 font-medium">Tasks</span>
-                </div>
-              </div>
+              <h2 className="text-lg font-bold text-slate-900">{t.dashboard.tasksByStatus}</h2>
+              <span className="text-xs font-medium text-slate-400">{t.dashboard.totalCount(tasks.length)}</span>
             </div>
             <div className="bg-white p-6 rounded-2xl border border-slate-200 h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data}>
+                <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis 
-                    dataKey="name" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fill: '#94a3b8', fontSize: 12 }} 
+                  <XAxis
+                    dataKey="name"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#94a3b8', fontSize: 12 }}
                     dy={10}
                   />
-                  <YAxis 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fill: '#94a3b8', fontSize: 12 }} 
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#94a3b8', fontSize: 12 }}
+                    allowDecimals={false}
                   />
-                  <Tooltip 
+                  <Tooltip
                     cursor={{ fill: '#f8fafc' }}
-                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                    contentStyle={{
+                      borderRadius: 12,
+                      border: '1px solid #e2e8f0',
+                      fontSize: 12,
+                      boxShadow: '0 8px 24px rgba(15,23,42,0.08)',
+                    }}
                   />
-                  <Bar dataKey="tasks" radius={[4, 4, 0, 0]} barSize={32}>
-                    {data.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={index === 3 ? '#2563eb' : '#e2e8f0'} />
+                  <Bar dataKey="tasks" radius={[8, 8, 0, 0]} maxBarSize={56}>
+                    {chartData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.fill} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -139,42 +214,54 @@ export const Dashboard: React.FC<DashboardProps> = ({ meetings, tasks, onMeeting
         <div className="space-y-8">
           <section>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-slate-900">AI Task Review</h2>
+              <h2 className="text-lg font-bold text-slate-900">{t.dashboard.aiTaskReview}</h2>
               <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-bold uppercase">
-                {pendingTasks.length} New
+                {t.dashboard.newBadge(pendingTasks.length)}
               </span>
             </div>
             <div className="space-y-4">
-              {pendingTasks.map(t => (
-                <TaskCard key={t.id} task={t} />
+              {pendingTasks.map((t) => (
+                <TaskCard
+                  key={t.id}
+                  task={t}
+                  meetingTitle={meetings.find((m) => m.id === t.meetingId)?.title}
+                  onApprove={() => onTaskApprove(t.id)}
+                  onEdit={() => onEditTask(t)}
+                />
               ))}
               {pendingTasks.length === 0 && (
                 <div className="py-8 text-center bg-slate-50 rounded-2xl border border-slate-100">
-                  <p className="text-slate-400 text-sm">All AI tasks reviewed</p>
+                  <p className="text-slate-400 text-sm">{t.dashboard.allReviewed}</p>
                 </div>
               )}
             </div>
           </section>
 
           <section>
-            <h2 className="text-lg font-bold text-slate-900 mb-4">Recent Meetings</h2>
+            <h2 className="text-lg font-bold text-slate-900 mb-4">{t.dashboard.recentMeetings}</h2>
             <div className="space-y-3">
-              {pastMeetings.slice(0, 3).map(m => (
-                <div 
-                  key={m.id} 
+              {pastMeetings.slice(0, 3).map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
                   onClick={() => onMeetingClick(m)}
-                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-100 transition-all cursor-pointer group"
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-100 transition-all cursor-pointer group text-left"
                 >
-                  <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
+                  <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors shrink-0">
                     <Clock className="w-5 h-5" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-slate-900 truncate">{m.title}</p>
-                    <p className="text-xs text-slate-500">Mar 19 • 45m</p>
+                    <p className="text-xs text-slate-500">
+                      {format(new Date(m.date), 'MMM d', { locale: dateLocale })} • {m.duration}
+                    </p>
                   </div>
-                  <ArrowUpRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-all" />
-                </div>
+                  <ArrowUpRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-all shrink-0" />
+                </button>
               ))}
+              {pastMeetings.length === 0 && (
+                <p className="text-sm text-slate-400 px-3">{t.dashboard.noCompleted}</p>
+              )}
             </div>
           </section>
         </div>

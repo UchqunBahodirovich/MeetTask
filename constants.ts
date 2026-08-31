@@ -1,11 +1,32 @@
-import { Meeting, User, Task } from './types';
+import { AppSettings, Meeting, TaskFilters, User } from './types';
 
 export const MOCK_USERS: User[] = [
-  { id: '1', name: 'Alex Rivera', email: 'alex@meettask.ai', avatar: 'https://api.dicebear.com/7.x/shapes/svg?seed=Alex&backgroundColor=2563eb' },
-  { id: '2', name: 'Sarah Chen', email: 'sarah@meettask.ai', avatar: 'https://api.dicebear.com/7.x/shapes/svg?seed=Sarah&backgroundColor=10b981' },
-  { id: '3', name: 'Michael Scott', email: 'michael@meettask.ai', avatar: 'https://api.dicebear.com/7.x/shapes/svg?seed=Michael&backgroundColor=f59e0b' },
-  { id: '4', name: 'Ali Hassan', email: 'ali@meettask.ai', avatar: 'https://api.dicebear.com/7.x/shapes/svg?seed=Ali&backgroundColor=8b5cf6' },
+  { id: '1', name: 'Alex Rivera', email: 'alex@meettask.ai', role: 'Product Manager', avatar: 'https://api.dicebear.com/7.x/shapes/svg?seed=Alex&backgroundColor=2563eb' },
+  { id: '2', name: 'Sarah Chen', email: 'sarah@meettask.ai', role: 'Product Designer', avatar: 'https://api.dicebear.com/7.x/shapes/svg?seed=Sarah&backgroundColor=10b981' },
+  { id: '3', name: 'Michael Scott', email: 'michael@meettask.ai', role: 'Sales Lead', avatar: 'https://api.dicebear.com/7.x/shapes/svg?seed=Michael&backgroundColor=f59e0b' },
+  { id: '4', name: 'Ali Hassan', email: 'ali@meettask.ai', role: 'Finance Analyst', avatar: 'https://api.dicebear.com/7.x/shapes/svg?seed=Ali&backgroundColor=8b5cf6' },
 ];
+
+export const CURRENT_USER: User = MOCK_USERS[0];
+
+export const DEFAULT_SETTINGS: AppSettings = {
+  displayName: CURRENT_USER.name,
+  email: CURRENT_USER.email,
+  language: 'en',
+  notifyAiTasks: true,
+  notifyUpcoming: true,
+  defaultTaskView: 'kanban',
+};
+
+export const EMPTY_TASK_FILTERS: TaskFilters = {
+  query: '',
+  statuses: [],
+  priorities: [],
+  assigneeIds: [],
+  meetingIds: [],
+  aiOnly: false,
+  pendingApprovalOnly: false,
+};
 
 export const MOCK_MEETINGS: Meeting[] = [
   {

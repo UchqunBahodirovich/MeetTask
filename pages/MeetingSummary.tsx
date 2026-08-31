@@ -1,177 +1,415 @@
-import React from 'react';
-import { 
-  FileText, 
-  CheckSquare, 
-  Users, 
-  Clock, 
-  Calendar,
+import React, { useMemo, useState } from 'react';
+import {
+  CheckSquare,
   Download,
   Share2,
   Sparkles,
   ArrowLeft,
-  MessageSquare
+  MessageSquare,
+  Search,
+  X,
+  Check,
+  Plus,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react';
-import { Meeting, Task } from '../types';
+import { Meeting, MeetingAnalysis, Task } from '../types';
 import { TaskCard } from '../components/TaskCard';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { analyzeMeeting } from '../services/meetingApi';
+import { analysisToTasks } from '../services/analysis';
+import { useI18n } from '../i18n';
 
 interface MeetingSummaryProps {
   meeting: Meeting;
+  /** Live tasks from the app store, so approvals and edits here match the board. */
+  tasks: Task[];
   onBack: () => void;
+  onApproveTask: (taskId: string) => void;
+  onEditTask: (task: Task) => void;
+  onAddTask: () => void;
+  /** Replaces the meeting's AI results and its AI-generated tasks. */
+  onReanalyzed: (analysis: MeetingAnalysis, tasks: Task[]) => void;
 }
 
-export const MeetingSummary: React.FC<MeetingSummaryProps> = ({ meeting, onBack }) => {
-  const aiTasks = meeting.tasks?.filter(t => t.isAiGenerated) || [];
-  const manualTasks = meeting.tasks?.filter(t => !t.isAiGenerated) || [];
+const buildMarkdown = (meeting: Meeting, tasks: Task[]): string => {
+  const lines: string[] = [
+    `# ${meeting.title}`,
+    '',
+    `- Date: ${new Date(meeting.date).toLocaleString()}`,
+    `- Duration: ${meeting.duration}`,
+    `- Participants: ${meeting.participants.map((p) => p.name).join(', ') || '—'}`,
+    '',
+    '## Summary',
+    meeting.summary || 'No summary is available.',
+  ];
+
+  if (meeting.keyPoints?.length) {
+    lines.push('', '## Key points', ...meeting.keyPoints.map((p) => `- ${p}`));
+  }
+  if (meeting.decisions?.length) {
+    lines.push('', '## Decisions', ...meeting.decisions.map((d) => `- ${d}`));
+  }
+  if (tasks.length) {
+    lines.push(
+      '',
+      '## Action items',
+      ...tasks.map(
+        (t) => `- [${t.status === 'completed' ? 'x' : ' '}] ${t.title} (${t.priority}, due ${t.deadline})`,
+      ),
+    );
+  }
+  if (meeting.transcript?.length) {
+    lines.push(
+      '',
+      '## Transcript',
+      ...meeting.transcript.map((l) => `**${l.speaker}** [${l.timestamp}]: ${l.text}`),
+    );
+  }
+  return lines.join('\n');
+};
+
+export const MeetingSummary: React.FC<MeetingSummaryProps> = ({
+  meeting,
+  tasks,
+  onBack,
+  onApproveTask,
+  onEditTask,
+  onAddTask,
+  onReanalyzed,
+}) => {
+  const [transcriptQuery, setTranscriptQuery] = useState('');
+  const { t } = useI18n();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [shareState, setShareState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [confirmReanalyze, setConfirmReanalyze] = useState(false);
+  const [isReanalyzing, setIsReanalyzing] = useState(false);
+  const [reanalyzeChunk, setReanalyzeChunk] = useState<{ index: number; total: number } | null>(null);
+  const [reanalyzeError, setReanalyzeError] = useState('');
+
+  const aiTasks = tasks.filter((task) => task.isAiGenerated);
+  const manualTasks = tasks.filter((task) => !task.isAiGenerated);
+
+  const transcript = meeting.transcript ?? [];
+  const filteredTranscript = useMemo(() => {
+    const q = transcriptQuery.trim().toLowerCase();
+    if (!q) return transcript;
+    return transcript.filter(
+      (line) => line.text.toLowerCase().includes(q) || line.speaker.toLowerCase().includes(q),
+    );
+  }, [transcript, transcriptQuery]);
+
+  const aiTaskCount = aiTasks.length;
+  const manualTaskCount = tasks.length - aiTaskCount;
+
+  /** Re-run the analysis over the stored transcript and replace the AI results. */
+  const handleReanalyze = async () => {
+    setConfirmReanalyze(false);
+    setReanalyzeError('');
+    setIsReanalyzing(true);
+    setReanalyzeChunk(null);
+    try {
+      const analysis = await analyzeMeeting(meeting, transcript, { onProgress: setReanalyzeChunk });
+      onReanalyzed(analysis, analysisToTasks(analysis, meeting, 'reanalysis'));
+    } catch (error) {
+      setReanalyzeError(error instanceof Error ? error.message : t.summary.reanalyzeFailed);
+    } finally {
+      setIsReanalyzing(false);
+      setReanalyzeChunk(null);
+    }
+  };
+
+  const handleExport = () => {
+    const blob = new Blob([buildMarkdown(meeting, tasks)], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${meeting.title.replace(/[^\w\d]+/g, '-').toLowerCase()}-summary.md`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleShare = async () => {
+    const shareUrl = `${window.location.origin}${window.location.pathname}#meeting-${meeting.id}`;
+    const text = `${meeting.title} — ${meeting.summary || 'Meeting summary'}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: meeting.title, text, url: shareUrl });
+        return;
+      }
+      await navigator.clipboard.writeText(`${text}\n${shareUrl}`);
+      setShareState('copied');
+    } catch {
+      setShareState('failed');
+    } finally {
+      window.setTimeout(() => setShareState('idle'), 2500);
+    }
+  };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
-      <div className="flex items-center justify-between">
-        <button 
+    <div className="max-w-5xl mx-auto space-y-8 animate-fade-up pb-20">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <button
+          type="button"
           onClick={onBack}
-          className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors"
+          className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-900 transition-colors self-start"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to Dashboard
+          {t.summary.back}
         </button>
-        <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all">
-            <Download className="w-4 h-4" />
-            Export
+        <div className="flex items-center gap-3 flex-wrap">
+          {shareState !== 'idle' && (
+            <span
+              className={`text-xs font-semibold ${shareState === 'copied' ? 'text-green-600' : 'text-red-600'}`}
+              role="status"
+            >
+              {shareState === 'copied' ? (
+                <span className="inline-flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" />
+                  {t.summary.linkCopied}
+                </span>
+              ) : (
+                t.summary.shareFailed
+              )}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setConfirmReanalyze(true)}
+            disabled={isReanalyzing || transcript.length === 0}
+            title={transcript.length === 0 ? t.summary.noTranscriptTitle : t.summary.reanalyzeTitle}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isReanalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            {isReanalyzing
+              ? reanalyzeChunk && reanalyzeChunk.total > 1
+                ? t.summary.reanalyzingPart(reanalyzeChunk.index + 1, reanalyzeChunk.total)
+                : t.summary.reanalyzing
+              : t.summary.reanalyze}
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200">
+          <button
+            type="button"
+            onClick={handleExport}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all"
+          >
+            <Download className="w-4 h-4" />
+            {t.summary.export}
+          </button>
+          <button
+            type="button"
+            onClick={handleShare}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200"
+          >
             <Share2 className="w-4 h-4" />
-            Share
+            {t.summary.share}
           </button>
         </div>
       </div>
+
+      {reanalyzeError && (
+        <p className="text-sm font-medium text-red-600 bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+          {reanalyzeError}
+        </p>
+      )}
 
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-8 border-b border-slate-100 bg-slate-50/30">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-bold uppercase tracking-wider">Completed</span>
-                <span className="text-xs text-slate-400 font-medium">Recorded on Mar 20, 2024</span>
+                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-[10px] font-bold uppercase tracking-wider">
+                  {t.summary.completed}
+                </span>
+                <span className="text-xs text-slate-400 font-medium">
+                  {t.summary.recordedOn(new Date(meeting.date).toLocaleDateString())}
+                </span>
               </div>
               <h1 className="text-3xl font-bold text-slate-900">{meeting.title}</h1>
             </div>
             <div className="flex items-center gap-6">
               <div className="text-center">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Duration</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t.summary.duration}</p>
                 <p className="text-lg font-bold text-slate-900">{meeting.duration}</p>
               </div>
               <div className="w-px h-8 bg-slate-200"></div>
               <div className="text-center">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Participants</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t.summary.participants}</p>
                 <p className="text-lg font-bold text-slate-900">{meeting.participants.length}</p>
               </div>
               <div className="w-px h-8 bg-slate-200"></div>
               <div className="text-center">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Tasks</p>
-                <p className="text-lg font-bold text-slate-900">{meeting.tasks?.length || 0}</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{t.summary.tasks}</p>
+                <p className="text-lg font-bold text-slate-900">{tasks.length}</p>
               </div>
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3">
-          <div className="lg:col-span-2 p-8 space-y-10 border-r border-slate-100">
+          <div className="lg:col-span-2 p-8 space-y-10 lg:border-r border-slate-100">
             <section>
               <div className="flex items-center gap-2 mb-4">
                 <Sparkles className="w-5 h-5 text-blue-600" />
-                <h2 className="text-xl font-bold text-slate-900">AI Summary</h2>
+                <h2 className="text-xl font-bold text-slate-900">{t.summary.aiSummary}</h2>
               </div>
               <div className="bg-blue-50/50 rounded-2xl p-6 border border-blue-100">
-                <p className="text-slate-700 leading-relaxed">
-                  {meeting.summary} The team agreed on the core priorities for the upcoming quarter, with a heavy emphasis on AI-driven features. Key stakeholders were assigned specific roles to ensure the roadmap stays on track.
-                </p>
-                <ul className="mt-6 space-y-3">
-                  <li className="flex items-start gap-3 text-sm text-slate-600">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 flex-shrink-0"></div>
-                    Prioritize AI task extraction for the next sprint.
-                  </li>
-                  <li className="flex items-start gap-3 text-sm text-slate-600">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 flex-shrink-0"></div>
-                    Review budget allocations for marketing by Monday.
-                  </li>
-                  <li className="flex items-start gap-3 text-sm text-slate-600">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 flex-shrink-0"></div>
-                    Finalize UI mockups for the dashboard redesign.
-                  </li>
-                </ul>
+                <p className="text-slate-700 leading-relaxed">{meeting.summary || t.summary.noSummary}</p>
+                {(meeting.keyPoints?.length || 0) > 0 && (
+                  <ul className="mt-6 space-y-3">
+                    {meeting.keyPoints?.map((point, index) => (
+                      <li key={`${point}-${index}`} className="flex items-start gap-3 text-sm text-slate-600">
+                        <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 flex-shrink-0" />
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </section>
 
             <section>
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-4 gap-3">
                 <div className="flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-slate-400" />
-                  <h2 className="text-xl font-bold text-slate-900">Full Transcript</h2>
+                  <h2 className="text-xl font-bold text-slate-900">{t.summary.fullTranscript}</h2>
                 </div>
-                <button className="text-sm font-semibold text-blue-600 hover:text-blue-700">Search transcript</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchOpen((open) => {
+                      if (open) setTranscriptQuery('');
+                      return !open;
+                    });
+                  }}
+                  aria-expanded={searchOpen}
+                  className="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 shrink-0"
+                >
+                  {searchOpen ? <X className="w-4 h-4" /> : <Search className="w-4 h-4" />}
+                  {searchOpen ? t.common.close : t.summary.searchTranscript}
+                </button>
               </div>
+
+              {searchOpen && (
+                <div className="mb-4">
+                  <input
+                    autoFocus
+                    value={transcriptQuery}
+                    onChange={(e) => setTranscriptQuery(e.target.value)}
+                    placeholder={t.summary.searchPlaceholder}
+                    aria-label={t.summary.searchTranscriptLabel}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:border-blue-500 transition-all"
+                  />
+                  <p className="mt-2 text-xs text-slate-400">
+                    {transcriptQuery.trim()
+                      ? t.summary.linesMatch(filteredTranscript.length, transcript.length)
+                      : t.summary.lineCount(transcript.length)}
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-6">
-                {meeting.transcript?.map((line) => (
+                {filteredTranscript.map((line) => (
                   <div key={line.id} className="flex gap-4">
                     <div className="w-10 h-10 rounded-xl bg-slate-100 flex-shrink-0 flex items-center justify-center text-xs font-bold text-slate-500">
                       {line.speaker[0]}
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-sm font-bold text-slate-900">{line.speaker}</span>
                         <span className="text-[10px] font-medium text-slate-400">{line.timestamp}</span>
                       </div>
-                      <p className="text-slate-600 leading-relaxed text-sm">
-                        {line.text}
-                      </p>
+                      <p className="text-slate-600 leading-relaxed text-sm">{line.text}</p>
                     </div>
                   </div>
                 ))}
+                {filteredTranscript.length === 0 && (
+                  <p className="text-sm text-slate-400 py-6 text-center bg-slate-50 rounded-xl">
+                    {transcript.length === 0 ? t.summary.noTranscript : t.summary.noLineMatches}
+                  </p>
+                )}
               </div>
             </section>
           </div>
 
           <div className="p-8 bg-slate-50/30 space-y-10">
             <section>
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-6 gap-2">
                 <div className="flex items-center gap-2">
                   <CheckSquare className="w-5 h-5 text-slate-900" />
-                  <h2 className="text-xl font-bold text-slate-900">Action Items</h2>
+                  <h2 className="text-xl font-bold text-slate-900">{t.summary.actionItems}</h2>
                 </div>
-                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-bold uppercase">
-                  {meeting.tasks?.length || 0}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-bold uppercase">
+                    {tasks.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onAddTask}
+                    aria-label={t.summary.addActionItem}
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-              
+
               <div className="space-y-4">
-                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">AI Generated</div>
-                {aiTasks.map(task => (
-                  <TaskCard key={task.id} task={task} />
-                ))}
-                
-                {manualTasks.length > 0 && (
+                {aiTasks.length > 0 && (
                   <>
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-8 mb-2">Manual Tasks</div>
-                    {manualTasks.map(task => (
-                      <TaskCard key={task.id} task={task} />
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">
+                      {t.summary.aiGeneratedGroup}
+                    </div>
+                    {aiTasks.map((task) => (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        onApprove={() => onApproveTask(task.id)}
+                        onEdit={() => onEditTask(task)}
+                      />
                     ))}
                   </>
+                )}
+
+                {manualTasks.length > 0 && (
+                  <>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-8 mb-2">
+                      {t.summary.manualGroup}
+                    </div>
+                    {manualTasks.map((task) => (
+                      <TaskCard key={task.id} task={task} onEdit={() => onEditTask(task)} />
+                    ))}
+                  </>
+                )}
+
+                {tasks.length === 0 && (
+                  <button
+                    type="button"
+                    onClick={onAddTask}
+                    className="w-full py-8 text-center bg-white rounded-2xl border-2 border-dashed border-slate-200 hover:border-blue-300 hover:text-blue-600 text-slate-400 text-sm font-medium transition-colors"
+                  >
+                    {t.summary.noActionItems}
+                  </button>
                 )}
               </div>
             </section>
 
             <section>
-              <h2 className="text-sm font-bold text-slate-900 mb-4 uppercase tracking-widest">Participants</h2>
+              <h2 className="text-sm font-bold text-slate-900 mb-4 uppercase tracking-widest">{t.summary.participants}</h2>
               <div className="space-y-3">
-                {meeting.participants.map(p => (
+                {meeting.participants.map((p) => (
                   <div key={p.id} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden">
-                        <img src={p.avatar} alt={p.name} className="w-full h-full object-cover" />
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden shrink-0">
+                        <img src={p.avatar} alt="" className="w-full h-full object-cover" />
                       </div>
-                      <span className="text-sm font-medium text-slate-700">{p.name}</span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium text-slate-700 truncate">{p.name}</span>
+                        {p.role && <span className="block text-xs text-slate-400 truncate">{p.role}</span>}
+                      </span>
                     </div>
-                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                    <div className="w-2 h-2 rounded-full bg-green-500 shrink-0"></div>
                   </div>
                 ))}
               </div>
@@ -179,6 +417,15 @@ export const MeetingSummary: React.FC<MeetingSummaryProps> = ({ meeting, onBack 
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmReanalyze}
+        title={t.summary.confirmReanalyzeTitle}
+        message={t.summary.confirmReanalyze(aiTaskCount, manualTaskCount)}
+        confirmLabel={t.summary.reanalyze}
+        onCancel={() => setConfirmReanalyze(false)}
+        onConfirm={handleReanalyze}
+      />
     </div>
   );
 };
