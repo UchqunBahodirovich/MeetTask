@@ -5,6 +5,9 @@ import { Field, inputClass } from './ui/Field';
 import { Meeting } from '../types';
 import { useTeam } from '../context/TeamContext';
 import { useI18n } from '../i18n';
+import { Avatar } from './ui/Avatar';
+import { isDemoMeeting, resolveDemoTeam } from '../services/demoMeeting';
+import { DateTimePicker, ceilToFive, parseValue, toDateTimeValue } from './ui/DateTimePicker';
 
 interface MeetingFormModalProps {
   open: boolean;
@@ -13,10 +16,11 @@ interface MeetingFormModalProps {
   onSave: (meeting: Meeting, startNow: boolean) => void;
 }
 
-/** `datetime-local` needs a local-time string, not the UTC string toISOString() produces. */
-const toLocalInputValue = (date: Date) => {
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+/** Default slot for a scheduled meeting: the next 5-minute mark at least 15 minutes out. */
+const nextSlot = () => ceilToFive(new Date(Date.now() + 15 * 60_000));
+const isPast = (value: string) => {
+  const at = parseValue(value);
+  return !at || at.getTime() < Date.now();
 };
 
 export const MeetingFormModal: React.FC<MeetingFormModalProps> = ({ open, onClose, onSave }) => {
@@ -28,16 +32,37 @@ export const MeetingFormModal: React.FC<MeetingFormModalProps> = ({ open, onClos
   const [participantIds, setParticipantIds] = useState<string[]>([]);
   const [startNow, setStartNow] = useState(true);
   const [error, setError] = useState('');
+  const [dateError, setDateError] = useState('');
 
   useEffect(() => {
     if (!open) return;
     setTitle('');
-    setDate(toLocalInputValue(new Date()));
+    setDate(toDateTimeValue(nextSlot()));
     setDuration('30');
     setParticipantIds(team.length ? [team[0].id] : []);
     setStartNow(true);
     setError('');
+    setDateError('');
   }, [open]);
+
+  // A scheduled time that slips into the past while the form is open can only mean "now".
+  useEffect(() => {
+    if (!open || startNow) return;
+    const check = () => {
+      if (!isPast(date)) return;
+      setStartNow(true);
+      setDateError(t.meetingForm.pastTime);
+    };
+    const timer = window.setInterval(check, 15_000);
+    return () => window.clearInterval(timer);
+  }, [open, startNow, date, t]);
+
+  const toggleStartNow = (next: boolean) => {
+    setDateError('');
+    setStartNow(next);
+    // Switching to "schedule" needs a time that has not passed yet.
+    if (!next && isPast(date)) setDate(toDateTimeValue(nextSlot()));
+  };
 
   const toggleParticipant = (id: string) =>
     setParticipantIds((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
@@ -49,17 +74,26 @@ export const MeetingFormModal: React.FC<MeetingFormModalProps> = ({ open, onClos
       setError(t.meetingForm.titleRequired);
       return;
     }
-    if (participantIds.length === 0) {
+    const selectedParticipants = team.filter((u) => participantIds.includes(u.id));
+    const demoParticipants = isDemoMeeting(trimmed) ? resolveDemoTeam(team) : [];
+    const participants = demoParticipants.length ? demoParticipants : selectedParticipants;
+    if (participants.length === 0) {
       setError(t.meetingForm.participantsRequired);
       return;
     }
-    const parsedDate = date ? new Date(date) : new Date();
+    if (!startNow && isPast(date)) {
+      // Past times cannot be scheduled: offer to start right away instead.
+      setStartNow(true);
+      setDateError(t.meetingForm.pastTime);
+      return;
+    }
+    const when = startNow ? new Date() : parseValue(date) ?? new Date();
     const meeting: Meeting = {
       id: `meeting-${Date.now()}`,
       title: trimmed,
-      date: (Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate).toISOString(),
+      date: when.toISOString(),
       duration: `${duration || '30'} min`,
-      participants: team.filter((u) => participantIds.includes(u.id)),
+      participants,
       status: startNow ? 'live' : 'upcoming',
       tasks: [],
     };
@@ -104,12 +138,15 @@ export const MeetingFormModal: React.FC<MeetingFormModalProps> = ({ open, onClos
         </Field>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label={t.meetingForm.dateTime} htmlFor="meeting-date">
-            <input
+          <Field label={t.meetingForm.dateTime} htmlFor="meeting-date" error={dateError}>
+            <DateTimePicker
               id="meeting-date"
-              type="datetime-local"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
+              withTime
+              value={startNow ? '' : date}
+              onChange={(value) => { setDate(value); setDateError(''); }}
+              min={new Date()}
+              disabled={startNow}
+              placeholder={startNow ? t.meetingForm.startsNow : undefined}
               className={inputClass}
             />
           </Field>
@@ -142,10 +179,10 @@ export const MeetingFormModal: React.FC<MeetingFormModalProps> = ({ open, onClos
                       : 'border-slate-200 hover:bg-slate-50 text-slate-600'
                   }`}
                 >
-                  <img src={user.avatar} alt="" className="w-6 h-6 rounded-full bg-slate-200 shrink-0" />
+                  <Avatar name={user.name} src={user.avatar} className="w-6 h-6" textClassName="text-[9px]" />
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium truncate">{user.name}</span>
-                    {user.role && <span className="block text-[10px] text-slate-400 truncate">{user.role}</span>}
+                    {user.role && <span className="block text-[10px] text-slate-500 truncate">{user.role}</span>}
                   </span>
                   {selected && <Check className="w-4 h-4 text-blue-600 shrink-0" />}
                 </button>
@@ -158,16 +195,17 @@ export const MeetingFormModal: React.FC<MeetingFormModalProps> = ({ open, onClos
           <input
             type="checkbox"
             checked={startNow}
-            onChange={(e) => setStartNow(e.target.checked)}
+            onChange={(e) => toggleStartNow(e.target.checked)}
             className="w-4 h-4 accent-blue-600"
           />
           <span className="text-sm font-medium text-slate-700">
             {t.meetingForm.startNow}
-            <span className="block text-xs font-normal text-slate-400">
+            <span className="block text-xs font-normal text-slate-500">
               {t.meetingForm.startNowHint}
             </span>
           </span>
         </label>
+
       </form>
     </Modal>
   );

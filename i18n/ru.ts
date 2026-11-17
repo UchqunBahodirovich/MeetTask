@@ -2,6 +2,7 @@ import type { Translations } from './en';
 
 export const ru: Translations = {
   common: {
+    loading: 'Загружаем рабочее пространство…',
     cancel: 'Отмена',
     close: 'Закрыть',
     save: 'Сохранить',
@@ -137,6 +138,9 @@ export const ru: Translations = {
     deleteMessage: (title: string) => `«${title}» будет удалена навсегда. Это действие необратимо.`,
   },
   taskCard: {
+    moveLeft: (column: string) => `Переместить в «${column}»`,
+    moveRight: (column: string) => `Переместить в «${column}»`,
+    ownerUnclear: 'Исполнитель неясен — нужно уточнение',
     aiGenerated: 'Создано ИИ',
     byRole: 'по роли',
     byRoleTitle: (role: string) => `Исполнитель не назван, задача ушла роли «${role}»`,
@@ -162,6 +166,17 @@ export const ru: Translations = {
       `${date}: встреч — ${meetings}, сроков задач — ${tasks}`,
   },
   summary: {
+    ownerClarificationTitle: 'Задачи без определённого исполнителя',
+    ownerClarificationQuestion: 'Анализ не смог определить исполнителей этих задач. Кто выполнит каждую задачу? Выберите одного или нескольких исполнителей и сохраните.',
+    chooseOwner: 'Назначить исполнителя',
+    deleteMeeting: 'Удалить встречу',
+    deleteMeetingLabel: (title: string) => `Удалить «${title}»`,
+    deleteMeetingTitle: 'Удалить встречу',
+    deleteMeetingMessage: (tasks: number) =>
+      tasks > 0
+        ? `Встреча, её расшифровка и задачи (${tasks}) будут удалены навсегда. Это действие необратимо.`
+        : 'Встреча и её расшифровка будут удалены навсегда. Это действие необратимо.',
+    deleteMeetingFailed: 'Не удалось удалить встречу.',
     back: 'Назад на дашборд',
     reanalyze: 'Проанализировать заново',
     reanalyzing: 'Анализируем заново…',
@@ -197,9 +212,15 @@ export const ru: Translations = {
       `Расшифровка будет проанализирована заново. Задач от ИИ будет заменено: ${ai}${
         manual > 0 ? `, добавленных вручную задач сохранится: ${manual}` : ''
       }.`,
+    finishingAnalysis: 'Дорабатываем анализ оставшейся части встречи… Новые задачи скоро появятся здесь.',
+    finishingAnalysisFailed: 'Не удалось проанализировать оставшуюся часть встречи. Нажмите «Проанализировать заново», чтобы попробовать ещё раз.',
     reanalyzeFailed: 'Не удалось проанализировать встречу заново.',
   },
   live: {
+    analysisMode: 'Режим анализа',
+    highlightsMode: 'Ключевые моменты',
+    highlightsHint: 'Главные мысли, решения и важные поручения. Карточки задач не создаются.',
+    highlightDecisions: 'Решения',
     participantsCount: (n: number) => `Участников: ${n}`,
     systemAudio: 'Системный звук',
     pauseMic: 'Выключить микрофон',
@@ -233,6 +254,7 @@ export const ru: Translations = {
     systemAudioFailed: 'Не удалось захватить системный звук.',
   },
   taskForm: {
+    pastDeadline: 'Срок не может быть в прошлом.',
     editTitle: 'Изменить задачу',
     newTitle: 'Новая задача',
     editSubtitle: 'Обновите детали задачи.',
@@ -253,6 +275,8 @@ export const ru: Translations = {
     createTask: 'Создать задачу',
   },
   meetingForm: {
+    startsNow: 'Начнётся прямо сейчас',
+    pastTime: 'Это время уже прошло. Выберите время позже текущего или начните встречу сейчас.',
     title: 'Новая встреча',
     subtitle: 'Запланируйте встречу или начните запись сразу.',
     titleField: 'Название',
@@ -268,6 +292,7 @@ export const ru: Translations = {
     schedule: 'Запланировать',
   },
   upload: {
+    futureDate: 'Дата записи не может быть в будущем.',
     title: 'Загрузить запись',
     subtitle: 'Расшифруйте готовый аудио- или видеофайл и получите из него задачи.',
     stageUploading: 'Загружаем запись',
@@ -337,7 +362,14 @@ export const ru: Translations = {
     emailPlaceholder: 'name@company.com',
     role: 'Роль',
     rolePlaceholder: 'например: Product Designer',
-    roleHint: 'Используется для задач, у которых не назван исполнитель.',
+    roleHint: 'Выберите подсказку или впишите любую должность, даже новую. Используется для задач, у которых не назван исполнитель.',
+    roleSuggestions: 'Подсказки',
+    saving: 'Сохранение…',
+    saveFailed: 'Не удалось сохранить команду.',
+    you: 'вы',
+    removing: 'Удаление…',
+    removeFailed: 'Не удалось удалить участника.',
+    saved: 'Сохранено',
     updateMember: 'Обновить участника',
     addMemberButton: 'Добавить участника',
     saveTeam: 'Сохранить команду',
@@ -345,5 +377,17 @@ export const ru: Translations = {
     removeLabel: (name: string) => `Убрать ${name}`,
     removeTitle: 'Убрать участника',
     removeMessage: (name: string) => `${name} будет убран. Его задачи останутся без исполнителя.`,
+  },
+  picker: {
+    chooseDate: 'Выберите дату',
+    chooseDateTime: 'Выберите дату и время',
+    prevMonth: 'Предыдущий месяц',
+    nextMonth: 'Следующий месяц',
+    time: 'Время',
+    hours: 'Часы',
+    minutes: 'Минуты',
+    today: 'Сегодня',
+    now: 'Сейчас',
+    done: 'Готово',
   },
 };

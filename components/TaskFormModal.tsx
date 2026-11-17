@@ -4,6 +4,9 @@ import { Field, inputClass } from './ui/Field';
 import { Meeting, Priority, Task, TaskStatus } from '../types';
 import { useTeam } from '../context/TeamContext';
 import { useI18n } from '../i18n';
+import { taskAssigneeIds } from '../services/taskAssignees';
+import { Select } from './ui/Select';
+import { DateTimePicker, parseValue } from './ui/DateTimePicker';
 
 interface TaskFormModalProps {
   open: boolean;
@@ -23,7 +26,7 @@ const PRIORITY_OPTIONS: Priority[] = ['low', 'medium', 'high'];
 interface FormState {
   title: string;
   description: string;
-  assigneeId: string;
+  assigneeIds: string[];
   deadline: string;
   priority: Priority;
   status: TaskStatus;
@@ -33,14 +36,14 @@ interface FormState {
 const emptyForm = (status: TaskStatus, meetingId: string): FormState => ({
   title: '',
   description: '',
-  assigneeId: '',
+  assigneeIds: [],
   deadline: '',
   priority: 'medium',
   status,
   meetingId,
 });
 
-/** Deadlines can arrive from the AI as free text, so only feed real ISO dates to <input type="date">. */
+/** Deadlines can arrive from the AI as free text, so only feed real ISO dates to the date picker. */
 const toDateInput = (value: string) => (/^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '');
 
 export const TaskFormModal: React.FC<TaskFormModalProps> = ({
@@ -61,16 +64,18 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
   const initialMeetingId: string = defaultMeetingId ?? '';
   const [form, setForm] = useState<FormState>(emptyForm(initialStatus, initialMeetingId));
   const [error, setError] = useState('');
+  const [deadlineError, setDeadlineError] = useState('');
 
   useEffect(() => {
     if (!open) return;
     setError('');
+    setDeadlineError('');
     setForm(
       task
         ? {
             title: task.title,
             description: task.description ?? '',
-            assigneeId: task.assigneeId,
+            assigneeIds: taskAssigneeIds(task),
             deadline: toDateInput(task.deadline),
             priority: task.priority,
             status: task.status,
@@ -95,11 +100,21 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
       setError(t.taskForm.titleRequired);
       return;
     }
+    // New deadlines cannot be in the past; an existing overdue one may be kept as it is.
+    const original = task ? toDateInput(task.deadline) : '';
+    const due = parseValue(form.deadline);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (due && form.deadline !== original && due < today) {
+      setDeadlineError(t.taskForm.pastDeadline);
+      return;
+    }
     onSave({
       id: task?.id ?? `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       title,
       description: form.description.trim() || undefined,
-      assigneeId: form.assigneeId,
+      assigneeId: form.assigneeIds[0] ?? '',
+      assigneeIds: form.assigneeIds,
       deadline: form.deadline || 'No deadline',
       priority: form.priority,
       status: form.status,
@@ -159,69 +174,70 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
         </Field>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label={t.taskForm.assignee} htmlFor="task-assignee">
-            <select
-              id="task-assignee"
-              value={form.assigneeId}
-              onChange={(e) => set('assigneeId', e.target.value)}
-              className={inputClass}
-            >
-              <option value="">{t.common.unassigned}</option>
+          <Field label={t.taskForm.assignee} htmlFor="task-assignee-list">
+            <div id="task-assignee-list" className="max-h-36 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-2 space-y-1">
               {team.map((u) => (
-                <option key={u.id} value={u.id}>{u.role ? `${u.name} — ${u.role}` : u.name}</option>
+                <label key={u.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.assigneeIds.includes(u.id)}
+                    onChange={() => set(
+                      'assigneeIds',
+                      form.assigneeIds.includes(u.id)
+                        ? form.assigneeIds.filter((id) => id !== u.id)
+                        : [...form.assigneeIds, u.id],
+                    )}
+                    className="h-3.5 w-3.5 accent-blue-600"
+                  />
+                  <span className="min-w-0 text-sm text-slate-700 truncate">
+                    {u.role ? `${u.name} — ${u.role}` : u.name}
+                  </span>
+                </label>
               ))}
-            </select>
+              {team.length === 0 && <p className="px-2 py-1 text-sm italic text-slate-500">{t.common.unassigned}</p>}
+            </div>
           </Field>
 
-          <Field label={t.taskForm.deadline} htmlFor="task-deadline">
-            <input
+          <Field label={t.taskForm.deadline} htmlFor="task-deadline" error={deadlineError}>
+            <DateTimePicker
               id="task-deadline"
-              type="date"
               value={form.deadline}
-              onChange={(e) => set('deadline', e.target.value)}
+              onChange={(value) => { set('deadline', value); setDeadlineError(''); }}
+              min={new Date()}
               className={inputClass}
             />
           </Field>
 
           <Field label={t.taskForm.priority} htmlFor="task-priority">
-            <select
+            <Select
               id="task-priority"
               value={form.priority}
-              onChange={(e) => set('priority', e.target.value as Priority)}
+              onChange={(priority) => set('priority', priority)}
+              options={PRIORITY_OPTIONS.map((p) => ({ value: p, label: t.priority[p] }))}
               className={`${inputClass} capitalize`}
-            >
-              {PRIORITY_OPTIONS.map((p) => (
-                <option key={p} value={p} className="capitalize">{t.priority[p]}</option>
-              ))}
-            </select>
+              panelClassName="capitalize"
+            />
           </Field>
 
           <Field label={t.taskForm.status} htmlFor="task-status">
-            <select
+            <Select
               id="task-status"
               value={form.status}
-              onChange={(e) => set('status', e.target.value as TaskStatus)}
+              onChange={(status) => set('status', status)}
+              options={STATUS_OPTIONS.map((option) => ({ value: option, label: t.status[option] }))}
               className={inputClass}
-            >
-              {STATUS_OPTIONS.map((option) => (
-                <option key={option} value={option}>{t.status[option]}</option>
-              ))}
-            </select>
+            />
           </Field>
         </div>
 
         <Field label={t.taskForm.meeting} htmlFor="task-meeting" hint={t.taskForm.meetingHint}>
-          <select
+          <Select
             id="task-meeting"
             value={form.meetingId}
-            onChange={(e) => set('meetingId', e.target.value)}
+            onChange={(meetingId) => set('meetingId', meetingId)}
+            options={[{ value: '', label: t.taskForm.noMeeting }, ...meetingOptions.map((m) => ({ value: m.id, label: m.title }))]}
             className={inputClass}
-          >
-            <option value="">{t.taskForm.noMeeting}</option>
-            {meetingOptions.map((m) => (
-              <option key={m.id} value={m.id}>{m.title}</option>
-            ))}
-          </select>
+          />
         </Field>
       </form>
     </Modal>

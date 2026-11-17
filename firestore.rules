@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Firestore is server-only. The Go API uses Admin credentials and enforces
+    // workspace scope plus RBAC; browsers must never access these collections.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

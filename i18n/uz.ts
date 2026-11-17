@@ -2,13 +2,14 @@ import type { Translations } from './en';
 
 export const uz: Translations = {
   common: {
+    loading: 'Ma’lumotlar yuklanmoqda…',
     cancel: 'Bekor qilish',
     close: 'Yopish',
     save: 'Saqlash',
-    delete: "O'chirish",
+    delete: "O‘chirish",
     remove: 'Olib tashlash',
     edit: 'Tahrirlash',
-    add: "Qo'shish",
+    add: "Qo‘shish",
     approve: 'Tasdiqlash',
     search: 'Qidirish',
     clear: 'Tozalash',
@@ -19,7 +20,7 @@ export const uz: Translations = {
     of: '/',
     more: 'yana',
   },
-  priority: { low: 'past', medium: "o'rta", high: 'yuqori' },
+  priority: { low: 'past', medium: "o‘rta", high: 'yuqori' },
   status: { todo: 'Bajarilishi kerak', 'in-progress': 'Jarayonda', review: 'Tekshiruvda', completed: 'Bajarildi' },
   meetingStatus: { upcoming: 'rejalashtirilgan', live: 'jonli', completed: 'yakunlangan' },
   nav: {
@@ -137,6 +138,9 @@ export const uz: Translations = {
     deleteMessage: (title: string) => `“${title}” butunlay o‘chiriladi. Buni qaytarib bo‘lmaydi.`,
   },
   taskCard: {
+    moveLeft: (column: string) => `${column} ustuniga ko‘chirish`,
+    moveRight: (column: string) => `${column} ustuniga ko‘chirish`,
+    ownerUnclear: 'Bajaruvchi noaniq — aniqlashtirish kerak',
     aiGenerated: 'AI yaratgan',
     byRole: 'kasb bo‘yicha',
     byRoleTitle: (role: string) => `Hech kim aytilmagani uchun ${role} kasbiga biriktirildi`,
@@ -162,6 +166,17 @@ export const uz: Translations = {
       `${date}: ${meetings} ta yig‘ilish, ${tasks} ta vazifa muddati`,
   },
   summary: {
+    ownerClarificationTitle: 'Bajaruvchisi aniqlanmagan vazifalar',
+    ownerClarificationQuestion: 'Analizda bu vazifalarning bajaruvchisini aniq topib bo‘lmadi. Har bir vazifani kim bajaradi? Bajaruvchi yoki bir nechta bajaruvchini tanlab, saqlang.',
+    chooseOwner: 'Bajaruvchini belgilash',
+    deleteMeeting: 'Yig‘ilishni o‘chirish',
+    deleteMeetingLabel: (title: string) => `${title} — o‘chirish`,
+    deleteMeetingTitle: 'Yig‘ilishni o‘chirish',
+    deleteMeetingMessage: (tasks: number) =>
+      tasks > 0
+        ? `Yig‘ilish, uning transkripti va ${tasks} ta vazifasi butunlay o‘chiriladi. Buni qaytarib bo‘lmaydi.`
+        : 'Yig‘ilish va uning transkripti butunlay o‘chiriladi. Buni qaytarib bo‘lmaydi.',
+    deleteMeetingFailed: 'Yig‘ilishni o‘chirib bo‘lmadi.',
     back: 'Boshqaruv paneliga qaytish',
     reanalyze: 'Qayta tahlil',
     reanalyzing: 'Qayta tahlil qilinmoqda…',
@@ -197,9 +212,15 @@ export const uz: Translations = {
       `Transkript qaytadan tahlil qilinadi. Bu yig‘ilishning ${ai} ta AI vazifasi almashtiriladi${
         manual > 0 ? `, qo‘lda qo‘shilgan ${manual} ta vazifa saqlanadi` : ''
       }.`,
+    finishingAnalysis: 'Yig‘ilishning qolgan qismi tahlil qilinmoqda… Yangi vazifalar tez orada shu yerda paydo bo‘ladi.',
+    finishingAnalysisFailed: 'Yig‘ilishning qolgan qismini tahlil qilib bo‘lmadi. Qayta urinish uchun “Qayta tahlil” tugmasini bosing.',
     reanalyzeFailed: 'Yig‘ilishni qayta tahlil qilib bo‘lmadi.',
   },
   live: {
+    analysisMode: 'Analiz rejimi',
+    highlightsMode: 'Muhim momentlar',
+    highlightsHint: 'Asosiy fikrlar, qarorlar va muhim topshiriqlar. Task kartalari yaratilmaydi.',
+    highlightDecisions: 'Qarorlar',
     participantsCount: (n: number) => `${n} ta ishtirokchi`,
     systemAudio: 'Tizim ovozi',
     pauseMic: 'Mikrofonni o‘chirish',
@@ -233,6 +254,7 @@ export const uz: Translations = {
     systemAudioFailed: 'Tizim ovozini olib bo‘lmadi.',
   },
   taskForm: {
+    pastDeadline: 'Muddat o‘tgan sana bo‘lishi mumkin emas.',
     editTitle: 'Vazifani tahrirlash',
     newTitle: 'Yangi vazifa',
     editSubtitle: 'Vazifa ma’lumotlarini yangilang.',
@@ -253,6 +275,8 @@ export const uz: Translations = {
     createTask: 'Vazifa yaratish',
   },
   meetingForm: {
+    startsNow: 'Hoziroq boshlanadi',
+    pastTime: 'Bu vaqt allaqachon o‘tib ketgan. Hozirdan keyingi vaqtni tanlang yoki yig‘ilishni hozir boshlang.',
     title: 'Yangi yig‘ilish',
     subtitle: 'Yig‘ilishni rejalashtiring yoki darhol yozib oling.',
     titleField: 'Nomi',
@@ -268,6 +292,7 @@ export const uz: Translations = {
     schedule: 'Rejalashtirish',
   },
   upload: {
+    futureDate: 'Yozuv sanasi kelajakda bo‘lishi mumkin emas.',
     title: 'Yozuvni yuklash',
     subtitle: 'Tayyor audio yoki video faylni transkript qilib, vazifalarni ajratib oling.',
     stageUploading: 'Yozuv yuklanmoqda',
@@ -337,7 +362,14 @@ export const uz: Translations = {
     emailPlaceholder: 'ism@kompaniya.com',
     role: 'Kasb',
     rolePlaceholder: 'masalan: Product Designer',
-    roleHint: 'Hech kim aytilmagan vazifalarni yo‘naltirish uchun ishlatiladi.',
+    roleHint: 'Tavsiyalardan tanlang yoki istalgan lavozimni, hatto yangisini ham o‘zingiz yozing. Hech kim aytilmagan vazifalarni yo‘naltirish uchun ishlatiladi.',
+    roleSuggestions: 'Tavsiyalar',
+    saving: 'Saqlanmoqda…',
+    saveFailed: 'Jamoani saqlab bo‘lmadi.',
+    you: 'siz',
+    removing: 'O‘chirilmoqda…',
+    removeFailed: 'A’zoni o‘chirib bo‘lmadi.',
+    saved: 'Saqlandi',
     updateMember: 'A’zoni yangilash',
     addMemberButton: 'A’zo qo‘shish',
     saveTeam: 'Jamoani saqlash',
@@ -345,5 +377,17 @@ export const uz: Translations = {
     removeLabel: (name: string) => `${name} — olib tashlash`,
     removeTitle: 'A’zoni olib tashlash',
     removeMessage: (name: string) => `${name} olib tashlanadi. Unga biriktirilgan vazifalar biriktirilmagan bo‘lib qoladi.`,
+  },
+  picker: {
+    chooseDate: 'Sanani tanlang',
+    chooseDateTime: 'Sana va vaqtni tanlang',
+    prevMonth: 'Oldingi oy',
+    nextMonth: 'Keyingi oy',
+    time: 'Vaqt',
+    hours: 'Soat',
+    minutes: 'Daqiqa',
+    today: 'Bugun',
+    now: 'Hozir',
+    done: 'Tayyor',
   },
 };

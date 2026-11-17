@@ -4,13 +4,13 @@ import { Modal } from './ui/Modal';
 import { Field, inputClass } from './ui/Field';
 import { AppSettings, Language } from '../types';
 import { LANGUAGES, useI18n } from '../i18n';
+import { Select } from './ui/Select';
 
 interface SettingsModalProps {
   open: boolean;
   settings: AppSettings;
   onClose: () => void;
   onSave: (settings: AppSettings) => void;
-  onResetData: () => void;
   onManageTeam: () => void;
 }
 
@@ -29,7 +29,7 @@ const Toggle: React.FC<{
     />
     <span className="text-sm font-medium text-slate-700">
       {label}
-      <span className="block text-xs font-normal text-slate-400">{hint}</span>
+      <span className="block text-xs font-normal text-slate-500">{hint}</span>
     </span>
   </label>
 );
@@ -39,7 +39,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
   onClose,
   onSave,
-  onResetData,
   onManageTeam,
 }) => {
   const { t } = useI18n();
@@ -106,28 +105,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           htmlFor="settings-language"
           hint={t.settings.languageHint}
         >
-          <select
+          <Select
             id="settings-language"
             value={draft.language}
-            onChange={(e) => set('language', e.target.value as Language)}
+            onChange={(language) => set('language', language)}
+            options={LANGUAGES.map((option) => ({ value: option.code, label: option.label }))}
             className={inputClass}
-          >
-            {LANGUAGES.map((option) => (
-              <option key={option.code} value={option.code}>{option.label}</option>
-            ))}
-          </select>
+          />
         </Field>
 
         <Field label={t.settings.defaultTaskView} htmlFor="settings-view">
-          <select
+          <Select<AppSettings['defaultTaskView']>
             id="settings-view"
             value={draft.defaultTaskView}
-            onChange={(e) => set('defaultTaskView', e.target.value as AppSettings['defaultTaskView'])}
+            onChange={(view) => set('defaultTaskView', view)}
+            options={[{ value: 'kanban', label: t.settings.kanban }, { value: 'list', label: t.settings.list }]}
             className={inputClass}
-          >
-            <option value="kanban">{t.settings.kanban}</option>
-            <option value="list">{t.settings.list}</option>
-          </select>
+          />
         </Field>
 
         <div className="space-y-2">
@@ -155,17 +149,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           >
             <Users className="w-4 h-4" />
             {t.settings.manageTeam}
-          </button>
-        </div>
-
-        <div className="pt-2 border-t border-slate-100">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t.settings.data}</p>
-          <button
-            type="button"
-            onClick={onResetData}
-            className="w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-red-600 border border-red-200 hover:bg-red-50 transition-colors"
-          >
-            {t.settings.resetData}
           </button>
         </div>
       </div>

@@ -1,5 +1,28 @@
-import type { Meeting, MeetingAnalysis, TranscriptLine } from '../types';
+import type { Language, Meeting, MeetingAnalysis, TranscriptLine } from '../types';
 import { tokensToLines, type TranscriptToken } from './transcript';
+import { ApiError } from './api';
+
+/**
+ * The API server is separate from the static site. When the two are served
+ * from one origin (local dev, `npm start`) relative paths work; on a static
+ * host such as Firebase Hosting set VITE_API_BASE_URL to the API's origin.
+ */
+const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
+const apiUrl = (path: string) => `${API_BASE}${path}`;
+
+const NO_API_SERVER =
+  'API server topilmadi. Serverni ishga tushiring yoki VITE_API_BASE_URL ni sozlang.';
+
+/**
+ * A static host (e.g. Firebase Hosting) answers unknown /api paths with the SPA
+ * shell, so a 200 with HTML means the API is simply not deployed there.
+ */
+function assertApiResponse(response: Response) {
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.includes('json') && !contentType.includes('x-ndjson')) {
+    throw new Error(NO_API_SERVER);
+  }
+}
 
 async function readError(response: Response): Promise<string> {
   try {
@@ -11,12 +34,13 @@ async function readError(response: Response): Promise<string> {
 }
 
 export async function getTranscriptionKey(meetingId: string): Promise<string> {
-  const response = await fetch('/api/transcription/temporary-key', {
+  const response = await fetch(apiUrl('/api/transcription/temporary-key'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ meetingId }),
   });
-  if (!response.ok) throw new Error(await readError(response));
+  if (!response.ok) throw new ApiError(await readError(response), response.status);
+  assertApiResponse(response);
   const data = await response.json();
   if (typeof data.api_key !== 'string') throw new Error('Transkripsiya kaliti olinmadi.');
   return data.api_key;
@@ -41,13 +65,16 @@ export async function analyzeMeeting(
     signal?: AbortSignal;
     /** Titles already extracted; the server will not return them again. */
     knownTasks?: string[];
+    /** UI language used for every generated human-readable field. */
+    language?: Language;
+    mode?: 'tasks' | 'highlights';
   } = {},
 ): Promise<MeetingAnalysis> {
   const transcriptText = transcript
     .map((line) => `[${line.timestamp}] ${line.speaker}: ${line.text}`)
     .join('\n');
 
-  const response = await fetch('/api/analyze', {
+  const response = await fetch(apiUrl('/api/analyze'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
     signal: options.signal,
@@ -56,10 +83,13 @@ export async function analyzeMeeting(
       meetingDate: meeting.date,
       participants: meeting.participants.map(({ id, name, role }) => ({ id, name, role: role ?? null })),
       transcript: transcriptText,
+      outputLanguage: options.language ?? 'uz',
+      mode: options.mode ?? meeting.analysisMode ?? 'tasks',
       ...(options.knownTasks?.length ? { knownTasks: options.knownTasks } : {}),
     }),
   });
-  if (!response.ok) throw new Error(await readError(response));
+  if (!response.ok) throw new ApiError(await readError(response), response.status);
+  assertApiResponse(response);
 
   // A proxy or older server may answer with plain JSON instead of the stream.
   if (!response.body || !(response.headers.get('content-type') || '').includes('x-ndjson')) {
@@ -128,7 +158,7 @@ function uploadRecording(
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
-    request.open('POST', '/api/meetings/transcribe');
+    request.open('POST', apiUrl('/api/meetings/transcribe'));
     request.setRequestHeader('Content-Type', 'application/octet-stream');
     request.setRequestHeader('X-File-Name', encodeURIComponent(file.name));
     if (languageHints.length) request.setRequestHeader('X-Language-Hints', languageHints.join(','));
@@ -145,6 +175,8 @@ function uploadRecording(
       }
       if (request.status >= 200 && request.status < 300 && payload.transcriptionId) {
         resolve(payload.transcriptionId);
+      } else if (!(request.getResponseHeader('content-type') ?? '').includes('json')) {
+        reject(new Error(NO_API_SERVER));
       } else {
         reject(new Error(payload.error || `Yuklab bo\u2018lmadi (HTTP ${request.status}).`));
       }
@@ -191,8 +223,9 @@ export async function transcribeRecording(
   onProgress?.({ stage: 'transcribing' });
   for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt += 1) {
     await wait(POLL_INTERVAL_MS, signal);
-    const response = await fetch(`/api/meetings/transcribe/${transcriptionId}`, { signal });
-    if (!response.ok) throw new Error(await readError(response));
+    const response = await fetch(apiUrl(`/api/meetings/transcribe/${transcriptionId}`), { signal });
+    if (!response.ok) throw new ApiError(await readError(response), response.status);
+    assertApiResponse(response);
     const payload = await response.json();
     if (payload.status === 'completed') {
       return {

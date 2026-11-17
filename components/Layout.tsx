@@ -1,4 +1,7 @@
 import React, { useMemo, useState } from 'react';
+import { BrandLogo } from './BrandLogo';
+import { useTheme } from '../hooks/useTheme';
+import { Moon, Sun } from 'lucide-react';
 import {
   LayoutDashboard,
   Video,
@@ -14,12 +17,17 @@ import {
   Sparkles,
   CalendarClock,
 } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion, type PanInfo } from 'framer-motion';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { AppSettings, Meeting, Task } from '../types';
 import { Popover } from './ui/Popover';
+import { Avatar } from './ui/Avatar';
 import { useI18n } from '../i18n';
 import { usePersistentState } from '../hooks/usePersistentState';
+import { useMediaQuery } from '../hooks/useMediaQuery';
+import { projectMomentum, SPRING_SHEET, SPRING_UI } from './ui/motion';
+import { getPublicCopy } from '../i18n/public';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -44,6 +52,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onClose,
 }) => {
   const { t } = useI18n();
+  const reduceMotion = useReducedMotion();
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
+  const DRAWER_WIDTH = 256;
+
+  // On release, decide from where the flick was heading rather than where it
+  // stopped, so a short fast swipe closes the drawer like a real panel.
+  const handleDrawerDragEnd = (_event: PointerEvent, info: PanInfo) => {
+    const projected = info.offset.x + projectMomentum(info.velocity.x);
+    if (projected < -DRAWER_WIDTH / 3) onClose?.();
+  };
+
   const menuItems = [
     { id: 'dashboard', label: t.nav.dashboard, icon: LayoutDashboard },
     { id: 'meetings', label: t.nav.meetings, icon: Video },
@@ -51,37 +70,55 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'calendar', label: t.nav.calendar, icon: Calendar },
   ];
 
+  // Below lg the sidebar is a draggable drawer; at lg it is static chrome, so
+  // the drag behaviour is attached only where it makes sense.
+  const drawerMotion = isDesktop
+    ? {}
+    : {
+        initial: false as const,
+        animate: { x: isOpen ? 0 : -DRAWER_WIDTH },
+        transition: reduceMotion ? { duration: 0.12 } : SPRING_SHEET,
+        drag: (isOpen ? 'x' : false) as 'x' | false,
+        dragConstraints: { left: -DRAWER_WIDTH, right: 0 },
+        dragElastic: { left: 0, right: 0.12 },
+        dragMomentum: false,
+        onDragEnd: handleDrawerDragEnd,
+        style: { touchAction: 'pan-y' as const },
+      };
+
   return (
     <>
-      {/* Mobile backdrop */}
-      <div
-        onClick={onClose}
-        aria-hidden="true"
-        className={cn(
-          'fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm lg:hidden transition-opacity',
-          isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none',
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            onClick={onClose}
+            aria-hidden="true"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={reduceMotion ? { duration: 0.12 } : SPRING_UI}
+            className="app-scrim fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm lg:hidden"
+          />
         )}
-      />
-      <aside
+      </AnimatePresence>
+      <motion.aside
+        {...drawerMotion}
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-64 border-r border-slate-200 bg-white flex flex-col h-screen transition-transform duration-300',
+          'fixed inset-y-0 left-0 z-50 w-64 border-r border-slate-200 bg-white flex flex-col h-screen',
           'lg:sticky lg:top-0 lg:translate-x-0 lg:shrink-0',
-          isOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
         <div className="p-6">
           <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Video className="text-white w-5 h-5" />
-              </div>
+            <a href="#/landing" className="flex items-center gap-2" aria-label="MeetTask bosh sahifasi">
+              <BrandLogo size={34} />
               <span className="font-bold text-xl tracking-tight">MeetTask AI</span>
-            </div>
+            </a>
             <button
               type="button"
               onClick={onClose}
               aria-label={t.nav.closeMenu}
-              className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 lg:hidden"
+              className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 lg:hidden"
             >
               <X className="w-4 h-4" />
             </button>
@@ -131,7 +168,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {t.nav.logout}
           </button>
         </div>
-      </aside>
+      </motion.aside>
     </>
   );
 };
@@ -145,6 +182,8 @@ interface Notification {
 
 interface HeaderProps {
   onMenuClick?: () => void;
+  /** True once content has scrolled under the bar, which is when an edge is needed. */
+  isScrolled?: boolean;
   meetings: Meeting[];
   tasks: Task[];
   settings: AppSettings;
@@ -158,6 +197,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   onMenuClick,
+  isScrolled = false,
   meetings,
   tasks,
   settings,
@@ -168,8 +208,10 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectMeeting,
   onSelectTask,
 }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const publicCopy = getPublicCopy(language);
   const [query, setQuery] = useState('');
+  const { theme, toggleTheme } = useTheme();
   const [searchOpen, setSearchOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -243,16 +285,15 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  const initials = settings.displayName
-    .split(' ')
-    .map((part) => part[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
 
   return (
-    <header className="h-16 border-b border-slate-200 bg-white/80 backdrop-blur-md sticky top-0 z-30 px-4 md:px-8 flex items-center justify-between gap-3">
+    <header
+      className={cn(
+        'app-material h-16 bg-white/80 backdrop-blur-md sticky top-0 z-30 px-4 md:px-8 flex items-center justify-between gap-3',
+        'border-b transition-colors duration-200',
+        isScrolled ? 'border-slate-200' : 'border-transparent',
+      )}
+    >
       <button
         type="button"
         onClick={onMenuClick}
@@ -270,7 +311,7 @@ export const Header: React.FC<HeaderProps> = ({
         panelClassName="w-full"
         trigger={
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input
               type="text"
               value={query}
@@ -289,7 +330,7 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 onClick={closeSearch}
                 aria-label={t.header.clearSearch}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:bg-slate-200 hover:text-slate-600"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-500 hover:bg-slate-200 hover:text-slate-600"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -299,14 +340,14 @@ export const Header: React.FC<HeaderProps> = ({
       >
         <div className="max-h-80 overflow-y-auto py-2">
           {!hasResults && (
-            <p className="px-4 py-6 text-center text-sm text-slate-400">
+            <p className="px-4 py-6 text-center text-sm text-slate-500">
               {t.header.noMatches(query.trim())}
             </p>
           )}
 
           {results.meetings.length > 0 && (
             <div className="px-2">
-              <p className="px-2 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.header.meetings}</p>
+              <p className="px-2 py-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t.header.meetings}</p>
               {results.meetings.map((m) => (
                 <button
                   key={m.id}
@@ -322,7 +363,7 @@ export const Header: React.FC<HeaderProps> = ({
                   </span>
                   <span className="min-w-0">
                     <span className="block text-sm font-semibold text-slate-900 truncate">{m.title}</span>
-                    <span className="block text-xs text-slate-400 capitalize">{m.status}</span>
+                    <span className="block text-xs text-slate-500 capitalize">{m.status}</span>
                   </span>
                 </button>
               ))}
@@ -331,7 +372,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {results.tasks.length > 0 && (
             <div className="px-2 mt-1">
-              <p className="px-2 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.header.tasks}</p>
+              <p className="px-2 py-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t.header.tasks}</p>
               {results.tasks.map((t) => (
                 <button
                   key={t.id}
@@ -347,7 +388,7 @@ export const Header: React.FC<HeaderProps> = ({
                   </span>
                   <span className="min-w-0">
                     <span className="block text-sm font-semibold text-slate-900 truncate">{t.title}</span>
-                    <span className="block text-xs text-slate-400 capitalize">{t.status.replace('-', ' ')}</span>
+                    <span className="block text-xs text-slate-500 capitalize">{t.status.replace('-', ' ')}</span>
                   </span>
                 </button>
               ))}
@@ -357,6 +398,9 @@ export const Header: React.FC<HeaderProps> = ({
       </Popover>
 
       <div className="flex items-center gap-2 md:gap-4 shrink-0">
+        <button type="button" onClick={toggleTheme} className="rounded-full p-2 text-slate-600 hover:bg-slate-100" aria-label={theme === 'dark' ? publicCopy.themeLight : publicCopy.themeDark}>
+          {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+        </button>
         <Popover
           open={bellOpen}
           onClose={() => setBellOpen(false)}
@@ -371,7 +415,7 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Bell className="w-5 h-5" />
               {unread.length > 0 && (
-                <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] font-bold rounded-full border-2 border-white flex items-center justify-center">
+                <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 bg-red-600 text-white text-[10px] font-bold rounded-full border-2 border-white flex items-center justify-center">
                   {unread.length > 9 ? '9+' : unread.length}
                 </span>
               )}
@@ -392,7 +436,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
           <div className="max-h-80 overflow-y-auto">
             {notifications.length === 0 && (
-              <p className="px-4 py-8 text-center text-sm text-slate-400">{t.header.allCaughtUp}</p>
+              <p className="px-4 py-8 text-center text-sm text-slate-500">{t.header.allCaughtUp}</p>
             )}
             {notifications.map((n) => {
               const isRead = readIds.includes(n.id);
@@ -412,7 +456,7 @@ export const Header: React.FC<HeaderProps> = ({
                     setBellOpen(false);
                   }}
                   className={`w-full flex items-start gap-3 px-4 py-3 text-left border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors ${
-                    isRead ? 'opacity-60' : ''
+                    isRead ? 'bg-slate-50/30' : ''
                   }`}
                 >
                   <span
@@ -453,7 +497,7 @@ export const Header: React.FC<HeaderProps> = ({
               aria-expanded={profileOpen}
               className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden border border-slate-200 hover:ring-2 hover:ring-blue-200 transition-all flex items-center justify-center text-[11px] font-bold text-slate-600"
             >
-              {avatar ? <img src={avatar} alt="" className="w-full h-full object-cover" /> : initials}
+              <Avatar name={settings.displayName} src={avatar} className="w-8 h-8" textClassName="text-[11px]" />
             </button>
           }
         >

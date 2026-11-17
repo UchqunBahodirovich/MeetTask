@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Scroll-linked motion measures section offsets against <html>; it must not be position:static. */
+html { position: relative; }
+
+.brand-logo-frame { display:inline-block; flex-shrink:0; background:transparent; vertical-align:middle; }
+.brand-logo-frame img { display:block; width:100%; height:100%; object-fit:contain; }
+
 @layer base {
   :root {
     --background: 210 40% 98%;
@@ -37,20 +43,258 @@
   }
 }
 
-.glass {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+@layer base {
+  /*
+   * Every interactive control keeps a visible keyboard focus ring. Several
+   * inputs set `outline-none` for their own styling, which without this rule
+   * leaves keyboard users with no idea where they are.
+   */
+  /* Written without :where() on purpose — a zero-specificity selector loses to
+     Tailwind's `outline-none` utility, which is exactly what it must override.
+
+     The ring is held at full width but transparent at rest, and only its colour
+     changes on focus. Many controls carry `transition-all`, which would
+     otherwise animate `outline-width` from 0 and make the ring grow into view
+     instead of being there the moment the key is pressed. */
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  summary,
+  [tabindex],
+  [role='button'] {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+  }
+
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  summary:focus-visible,
+  [tabindex]:focus-visible,
+  [role='button']:focus-visible {
+    outline: 2px solid rgb(37 99 235) !important;
+    outline-offset: 2px;
+    /* The ring belongs on screen the instant the key lands, so the transition
+       into the focused state is skipped. Leaving focus still uses the
+       element's own transition. */
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+  }
+
+  /* Pointer interaction must never be the only way to hit a control. */
+  button,
+  [role='button'] {
+    min-width: 24px;
+    min-height: 24px;
+  }
+
+  /*
+   * Feedback belongs on the press, not on release: the control reacts the
+   * instant the pointer goes down, which is what makes it feel direct.
+   */
+  button,
+  [role='button'] {
+    transition: transform 100ms ease-out;
+  }
+  button:not(:disabled):active,
+  [role='button']:not([aria-disabled='true']):active {
+    transform: scale(0.97);
+  }
 }
 
-.kanban-column {
-  @apply bg-slate-50/50 rounded-xl p-4 min-h-[500px] border border-slate-100;
+@layer base {
+  /*
+   * Type scale: tracking is size-specific. Large text reads too loose as it
+   * grows, so it tightens; small caps labels need a little extra to stay legible.
+   */
+  h1,
+  .text-3xl {
+    letter-spacing: -0.021em;
+    line-height: 1.1;
+  }
+  h2,
+  .text-2xl,
+  .text-xl {
+    letter-spacing: -0.014em;
+    line-height: 1.2;
+  }
+  .text-lg {
+    letter-spacing: -0.008em;
+  }
+  body {
+    letter-spacing: 0;
+    line-height: 1.5;
+  }
 }
 
-.task-card {
-  @apply bg-white p-4 rounded-lg shadow-sm border border-slate-200 hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing;
+/*
+ * Motion preferences. Reduced motion keeps the meaning (things still appear and
+ * disappear) but removes travel and overshoot, which is what triggers vestibular
+ * discomfort — it is not "no feedback".
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.08ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Page entrances still read as "new content", they just stop travelling. */
+  .animate-fade-up,
+  .animate-fade-in {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }
 
-.transcript-line {
-  @apply py-2 border-l-2 border-transparent hover:border-blue-500 hover:bg-blue-50/50 px-4 transition-all;
+/* Frosted surfaces become solid when the viewer asks for less transparency. */
+@media (prefers-reduced-transparency: reduce) {
+  .app-material {
+    background-color: rgb(255 255 255) !important;
+    backdrop-filter: none !important;
+  }
+
+  .app-scrim {
+    background-color: rgb(15 23 42 / 0.55) !important;
+    backdrop-filter: none !important;
+  }
 }
+
+/* High contrast: solid surfaces with a defined edge. */
+.meeting-insights {
+  --panel-bg: #fff;
+  --panel-surface: #f7f7f9;
+  --panel-border: #e7e7ed;
+  --panel-text: #202127;
+  --panel-muted: #737680;
+  --panel-accent: #2563eb;
+  background: var(--panel-bg);
+  color: var(--panel-text);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 12px 32px -16px rgb(15 23 42 / 0.16);
+  transition: background-color .25s, color .25s, border-color .25s;
+}
+.insights-switch { background: #0b1424; border: 1px solid rgb(148 163 184 / 0.1); border-radius: 16px; }
+.insights-mode { color: #a7b5ca; transition: background-color 150ms, color 150ms; }
+.insights-mode:hover { color: #f1f5f9; background: #1b2940; }
+.insights-mode[aria-pressed="true"] { color: #eff6ff; background: #2b4b7c; box-shadow: inset 0 1px rgb(255 255 255 / 0.1), 0 2px 6px rgb(0 0 0 / 0.15); }
+.meeting-insights :focus-visible { outline: 2px solid #93c5fd; outline-offset: 3px; }
+.insights-summary { background: rgb(59 130 246 / 0.06); border: 1px solid rgb(96 165 250 / 0.16); }
+.insights-note { background: rgb(148 163 184 / 0.055); border: 1px solid rgb(148 163 184 / 0.1); }
+.insights-note:hover { border-color: rgb(148 163 184 / 0.24); }
+.insights-decision { background: rgb(16 185 129 / 0.07); border: 1px solid rgb(52 211 153 / 0.18); color: #c5efdf; }
+.insights-scroll { scrollbar-width: thin; scrollbar-color: #455773 transparent; scrollbar-gutter: stable; overscroll-behavior-y: contain; overflow-wrap: anywhere; }
+.insights-scroll::-webkit-scrollbar { width: 6px; }
+.insights-scroll::-webkit-scrollbar-track { background: transparent; }
+.insights-scroll::-webkit-scrollbar-thumb { background: #455773; border-radius: 999px; }
+.insights-scroll::-webkit-scrollbar-thumb:hover { background: #7086a6; }
+
+.meeting-insights[data-panel-theme="dark"] {
+  --panel-bg: #09090b;
+  --panel-surface: #141417;
+  --panel-border: #28282f;
+  --panel-text: #efeff4;
+  --panel-muted: #a1a1ae;
+  --panel-accent: #60a5fa;
+}
+.meeting-insights .insights-switch { background: var(--panel-surface); border-color: var(--panel-border); }
+.meeting-insights .insights-mode { color: var(--panel-muted); }
+.meeting-insights .insights-mode:hover { background: var(--panel-bg); color: var(--panel-text); }
+.meeting-insights .insights-mode[aria-pressed="true"] { background: var(--panel-bg); color: var(--panel-accent); box-shadow: 0 1px 5px #00000010; }
+.meeting-insights .insights-summary,.meeting-insights .insights-note { background: var(--panel-surface); border-color: var(--panel-border); }
+.meeting-insights .insights-decision { color: var(--panel-text); }
+.meeting-insights .insights-scroll { scrollbar-color: var(--panel-border) transparent; }
+.meeting-insights .insights-scroll::-webkit-scrollbar-thumb { background: var(--panel-border); }
+.meeting-insights .insights-scroll::-webkit-scrollbar-thumb:hover { background: var(--panel-muted); }
+.meeting-insights .text-white,.meeting-insights .text-slate-100,.meeting-insights .text-slate-200,.meeting-insights .text-slate-300 { color: var(--panel-text); }
+.meeting-insights .text-slate-400,.meeting-insights .text-slate-500 { color: var(--panel-muted); }
+.meeting-insights .text-blue-200,.meeting-insights .text-blue-300,.meeting-insights .text-blue-400 { color: var(--panel-accent); }
+.meeting-insights .border-white\/5,.meeting-insights .border-slate-700,.meeting-insights .border-slate-800 { border-color: var(--panel-border); }
+.meeting-insights .bg-slate-800\/50 { background: var(--panel-surface); }
+.meeting-insights .insights-theme-toggle { color: var(--panel-muted); }
+.meeting-insights .insights-theme-toggle:hover { background: var(--panel-surface); color: var(--panel-text); }
+.meeting-insights .insights-note,.meeting-insights .insights-decision { animation: insight-appear .3s ease-out both; }
+@keyframes insight-appear { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+.ai-discovery-field { --discovery-ink:#55585f; --discovery-surface:#f0f1f3; position:absolute; inset:0; display:grid; place-items:center; overflow:hidden; pointer-events:none; z-index:0; opacity:1; transition:opacity .3s ease; }
+.ai-discovery-field::before { content:""; position:absolute; inset:0; background:var(--discovery-surface); transition:opacity .3s ease; }
+.ai-discovery-field[data-visible="false"] { opacity:0; }
+.meeting-insights[data-panel-theme="dark"] .ai-discovery-field { --discovery-ink:#e1e2e5; --discovery-surface:#202124; }
+.ai-discovery-morph { position:relative; display:block; width:min(76%,250px); aspect-ratio:1; max-height:100%; overflow:visible; transition:opacity .3s ease; }
+.insights-scroll[data-empty="true"] { min-height:260px; isolation:isolate; }
+/* The dots themselves are painted on a canvas by components/AiDiscoveryField.tsx. */
+.ai-discovery-field.ai-discovery-background::before { opacity:0; }
+.ai-discovery-background .ai-discovery-morph { opacity:.12; }
+.insights-scroll > :not(.ai-discovery-field) { position:relative; z-index:1; }
+@media (prefers-reduced-motion: reduce) {
+  .meeting-insights,.meeting-insights * { animation: none !important; transition: none !important; }
+  .ai-discovery-field,.ai-discovery-field::before,.ai-discovery-morph { transition:none !important; }
+}
+
+@media (prefers-contrast: more) {
+  .app-material {
+    background-color: rgb(255 255 255) !important;
+    backdrop-filter: none !important;
+    border-color: rgb(51 65 85) !important;
+  }
+}
+
+/* Custom select (components/ui/Select.tsx). The list is portalled to <body>, so it carries its own light/dark tokens. */
+.ui-select-trigger { display:inline-flex; align-items:center; justify-content:space-between; gap:8px; text-align:left; cursor:pointer; }
+.ui-select-trigger .ui-select-value { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ui-select-chevron { flex-shrink:0; opacity:.6; transition:transform .25s cubic-bezier(.16,1,.3,1); }
+.ui-select-trigger[data-open=true] .ui-select-chevron { transform:rotate(180deg); }
+.ui-select-panel { --sel-bg:#ffffff; --sel-ink:#0f172a; --sel-muted:#64748b; --sel-line:#e2e8f0; --sel-hover:#f1f5f9; --sel-accent:#2563eb;
+  position:fixed; z-index:1000; margin:0; padding:6px; list-style:none; max-height:320px; overflow:auto; overscroll-behavior:contain;
+  background:var(--sel-bg); color:var(--sel-ink); border:1px solid var(--sel-line); border-radius:14px;
+  box-shadow:0 18px 44px -18px rgb(15 23 42 / .28),0 2px 6px -2px rgb(15 23 42 / .08); outline:none; }
+[data-theme=dark] .ui-select-panel { --sel-bg:#101114; --sel-ink:#e2e8f0; --sel-muted:#a0abba; --sel-line:#292c33; --sel-hover:#1b1d22; --sel-accent:#70b2ff; box-shadow:0 22px 55px -24px rgb(0 0 0 / .95); }
+.ui-select-option { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:9px 12px; border-radius:9px; font-size:14px; line-height:1.3; cursor:pointer; user-select:none; transition:background-color .12s ease; }
+.ui-select-option[data-active=true] { background:var(--sel-hover); }
+.ui-select-option[aria-selected=true] { color:var(--sel-accent); font-weight:600; }
+.ui-select-option svg { flex-shrink:0; }
+@media (prefers-reduced-motion:reduce) { .ui-select-chevron,.ui-select-option { transition:none; } }
+
+/* Custom date / date-time picker (components/ui/DateTimePicker.tsx), portalled like the select. */
+.ui-picker-panel { --pk-bg:#ffffff; --pk-ink:#0f172a; --pk-muted:#64748b; --pk-faint:#cbd5e1; --pk-line:#e2e8f0; --pk-hover:#f1f5f9; --pk-accent:#2563eb; --pk-accent-soft:#eff6ff;
+  position:fixed; z-index:1000; width:300px; padding:12px; background:var(--pk-bg); color:var(--pk-ink); border:1px solid var(--pk-line); border-radius:16px;
+  box-shadow:0 18px 44px -18px rgb(15 23 42 / .28),0 2px 6px -2px rgb(15 23 42 / .08); font-size:14px; }
+[data-theme=dark] .ui-picker-panel { --pk-bg:#101114; --pk-ink:#e2e8f0; --pk-muted:#a0abba; --pk-faint:#4b5563; --pk-line:#292c33; --pk-hover:#1b1d22; --pk-accent:#3b82f6; --pk-accent-soft:#152842; box-shadow:0 22px 55px -24px rgb(0 0 0 / .95); }
+.ui-picker-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+.ui-picker-month { font-weight:600; text-transform:capitalize; }
+.ui-picker-nav { width:32px; height:32px; display:grid; place-items:center; border-radius:10px; color:var(--pk-muted); transition:background-color .15s,color .15s; }
+.ui-picker-nav:hover:not(:disabled) { background:var(--pk-hover); color:var(--pk-ink); }
+.ui-picker-nav:disabled { opacity:.35; cursor:not-allowed; }
+.ui-picker-weekdays,.ui-picker-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+.ui-picker-weekdays span { text-align:center; font-size:11px; font-weight:600; color:var(--pk-muted); padding:4px 0; text-transform:capitalize; }
+.ui-picker-day { height:36px; border-radius:10px; font-size:13px; font-variant-numeric:tabular-nums; color:var(--pk-ink); position:relative; transition:background-color .12s,color .12s; }
+.ui-picker-day:hover:not([data-disabled=true]):not([data-selected=true]) { background:var(--pk-hover); }
+.ui-picker-day[data-outside=true] { color:var(--pk-muted); }
+.ui-picker-day[data-today=true]::after { content:''; position:absolute; left:50%; bottom:5px; width:4px; height:4px; margin-left:-2px; border-radius:999px; background:var(--pk-accent); }
+.ui-picker-day[data-selected=true] { background:var(--pk-accent); color:#fff; font-weight:600; }
+.ui-picker-day[data-selected=true]::after { background:#fff; }
+.ui-picker-day[data-disabled=true] { color:var(--pk-faint); cursor:not-allowed; text-decoration:line-through; text-decoration-color:color-mix(in srgb,var(--pk-faint) 70%,transparent); }
+.ui-picker-day:focus-visible,.ui-picker-cell:focus-visible,.ui-picker-nav:focus-visible { outline:2px solid var(--pk-accent); outline-offset:1px; }
+.ui-picker-time { margin-top:10px; padding-top:10px; border-top:1px solid var(--pk-line); }
+.ui-picker-time-label { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; color:var(--pk-muted); margin-bottom:6px; }
+.ui-picker-columns { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.ui-picker-column { height:112px; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; border:1px solid var(--pk-line); border-radius:12px; padding:4px; display:grid; gap:2px; align-content:start; }
+.ui-picker-cell { height:30px; border-radius:8px; font-size:13px; font-variant-numeric:tabular-nums; color:var(--pk-ink); transition:background-color .12s; }
+.ui-picker-cell:hover:not([data-disabled=true]):not([aria-selected=true]) { background:var(--pk-hover); }
+.ui-picker-cell[aria-selected=true] { background:var(--pk-accent-soft); color:var(--pk-accent); font-weight:600; }
+.ui-picker-cell[data-disabled=true] { color:var(--pk-faint); cursor:not-allowed; }
+.ui-picker-foot { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:10px; }
+.ui-picker-link { padding:6px 10px; border-radius:10px; font-size:13px; font-weight:600; color:var(--pk-accent); }
+.ui-picker-link:hover:not(:disabled) { background:var(--pk-accent-soft); }
+.ui-picker-link:disabled { opacity:.4; cursor:not-allowed; }
+.ui-picker-done { padding:7px 14px; border-radius:10px; font-size:13px; font-weight:600; background:#2563eb; color:#fff; transition:background-color .15s; }
+.ui-picker-done:hover:not(:disabled) { background:#1d4ed8; }
+.ui-picker-done:disabled { opacity:.5; cursor:not-allowed; }
+@media (prefers-reduced-motion:reduce) { .ui-picker-day,.ui-picker-cell,.ui-picker-nav { transition:none; } }

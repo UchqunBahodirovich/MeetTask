@@ -16,6 +16,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, Clock, Plus, Upload, Video } f
 import { Meeting, Task } from '../types';
 import { useTeam } from '../context/TeamContext';
 import { useI18n } from '../i18n';
+import { taskAssigneeIds } from '../services/taskAssignees';
 
 interface CalendarPageProps {
   meetings: Meeting[];
@@ -165,7 +166,7 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-4 px-4 sm:px-6 py-2 border-b border-slate-100 text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
+          <div className="flex items-center gap-4 px-4 sm:px-6 py-2 border-b border-slate-100 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
             <span>{t.calendar.taskDeadlines}</span>
             {(['high', 'medium', 'low'] as const).map((p) => (
               <span key={p} className="flex items-center gap-1.5">
@@ -179,7 +180,7 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
             {days.slice(0, 7).map((day) => (
               <div
                 key={`weekday-${format(day, 'i')}`}
-                className="px-2 py-2 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest"
+                className="px-2 py-2 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest"
               >
                 {format(day, 'EEE', { locale: dateLocale })}
               </div>
@@ -210,7 +211,7 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
                         ? 'bg-blue-600 text-white'
                         : inMonth
                           ? 'text-slate-700'
-                          : 'text-slate-300'
+                          : 'text-slate-500'
                     }`}
                   >
                     {format(day, 'd')}
@@ -226,7 +227,7 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
                       </span>
                     ))}
                     {dayMeetings.length > 2 && (
-                      <span className="block text-[10px] font-bold text-slate-400 px-1.5">
+                      <span className="block text-[10px] font-bold text-slate-600 px-1.5">
                         {t.calendar.moreMeetings(dayMeetings.length - 2)}
                       </span>
                     )}
@@ -236,13 +237,13 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
                         className="flex items-center gap-1 text-[10px] font-medium text-slate-600 bg-white border border-slate-200 rounded px-1.5 py-0.5"
                       >
                         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${PRIORITY_DOT[task.priority]}`} />
-                        <span className={`truncate ${task.status === 'completed' ? 'line-through text-slate-400' : ''}`}>
+                        <span className={`truncate ${task.status === 'completed' ? 'line-through text-slate-500' : ''}`}>
                           {task.title}
                         </span>
                       </span>
                     ))}
                     {dayTasks.length > 2 && (
-                      <span className="block text-[10px] font-bold text-slate-400 px-1.5">
+                      <span className="block text-[10px] font-bold text-slate-600 px-1.5">
                         {t.calendar.moreDue(dayTasks.length - 2)}
                       </span>
                     )}
@@ -256,7 +257,7 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
         <div className="space-y-6">
           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
             <div className="flex items-center gap-2 mb-4">
-              <CalendarDays className="w-4 h-4 text-slate-400" />
+              <CalendarDays className="w-4 h-4 text-slate-500" />
               <h2 className="text-sm font-bold text-slate-900 uppercase tracking-widest">
                 {format(selected, 'EEEE, MMM d', { locale: dateLocale })}
               </h2>
@@ -264,9 +265,9 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
 
             <div className="space-y-4">
               <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">{t.calendar.meetings}</p>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">{t.calendar.meetings}</p>
                 {selectedMeetings.length === 0 && (
-                  <p className="text-sm text-slate-400">{t.calendar.nothingScheduled}</p>
+                  <p className="text-sm text-slate-500">{t.calendar.nothingScheduled}</p>
                 )}
                 <div className="space-y-2">
                   {selectedMeetings.map((m) => (
@@ -296,10 +297,10 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
               </div>
 
               <div className="pt-2 border-t border-slate-100">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 mt-2">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 mt-2">
                   {t.calendar.deadlines}
                 </p>
-                {selectedTasks.length === 0 && <p className="text-sm text-slate-400">{t.calendar.noDeadlines}</p>}
+                {selectedTasks.length === 0 && <p className="text-sm text-slate-500">{t.calendar.noDeadlines}</p>}
                 <div className="space-y-2">
                   {selectedTasks.map((task) => (
                     <button
@@ -313,12 +314,12 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
                         <span className="block text-sm font-semibold text-slate-900 truncate">{task.title}</span>
                         <span className="block text-xs text-slate-500 capitalize">
                           {t.status[task.status]}
-                          {task.assigneeId
-                            ? ` • ${memberById(task.assigneeId)?.name ?? '—'}`
+                          {taskAssigneeIds(task).length
+                            ? ` • ${taskAssigneeIds(task).map((id) => memberById(id)?.name).filter(Boolean).join(', ')}`
                             : ` • ${t.common.unassigned}`}
                         </span>
                         {meetings.find((m) => m.id === task.meetingId) && (
-                          <span className="block text-[10px] text-slate-400 truncate">
+                          <span className="block text-[10px] text-slate-500 truncate">
                             {t.calendar.fromMeeting(meetings.find((m) => m.id === task.meetingId)?.title ?? '')}
                           </span>
                         )}
@@ -333,9 +334,9 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
           {undatedTasks.length > 0 && (
             <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
               <div className="flex items-center gap-2 mb-3">
-                <Clock className="w-4 h-4 text-slate-400" />
+                <Clock className="w-4 h-4 text-slate-500" />
                 <h2 className="text-sm font-bold text-slate-900 uppercase tracking-widest">{t.calendar.noDeadlineGroup}</h2>
-                <span className="ml-auto text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                <span className="ml-auto text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
                   {undatedTasks.length}
                 </span>
               </div>

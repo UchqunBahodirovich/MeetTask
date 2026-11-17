@@ -1,5 +1,6 @@
 export const en = {
   common: {
+    loading: 'Loading your workspace…',
     cancel: 'Cancel',
     close: 'Close',
     save: 'Save',
@@ -134,6 +135,9 @@ export const en = {
     deleteMessage: (title: string) => `“${title}” will be removed permanently. This cannot be undone.`,
   },
   taskCard: {
+    moveLeft: (column: string) => `Move to ${column}`,
+    moveRight: (column: string) => `Move to ${column}`,
+    ownerUnclear: 'Owner unclear — clarification needed',
     aiGenerated: 'AI generated',
     byRole: 'by role',
     byRoleTitle: (role: string) => `Nobody was named, so this went to the ${role} role`,
@@ -159,6 +163,17 @@ export const en = {
       `${date}: ${meetings} meetings, ${tasks} task deadlines`,
   },
   summary: {
+    ownerClarificationTitle: 'Tasks needing an owner',
+    ownerClarificationQuestion: 'The analysis could not identify the owners of these tasks. Who will handle each task? Select one or more owners and save.',
+    chooseOwner: 'Assign owner',
+    deleteMeeting: 'Delete meeting',
+    deleteMeetingLabel: (title: string) => `Delete ${title}`,
+    deleteMeetingTitle: 'Delete this meeting',
+    deleteMeetingMessage: (tasks: number) =>
+      tasks > 0
+        ? `The meeting, its transcript and its ${tasks} task${tasks === 1 ? '' : 's'} will be removed permanently. This cannot be undone.`
+        : 'The meeting and its transcript will be removed permanently. This cannot be undone.',
+    deleteMeetingFailed: 'The meeting could not be deleted.',
     back: 'Back to Dashboard',
     reanalyze: 'Re-analyze',
     reanalyzing: 'Re-analyzing…',
@@ -194,9 +209,15 @@ export const en = {
       `The transcript will be analysed again. ${ai} AI-generated task${ai === 1 ? '' : 's'} from this meeting will be replaced${
         manual > 0 ? `, and ${manual} manually added task${manual === 1 ? '' : 's'} will be kept` : ''
       }.`,
+    finishingAnalysis: 'Finishing the analysis of the rest of the meeting… New tasks will appear here shortly.',
+    finishingAnalysisFailed: 'The rest of the meeting could not be analysed. Use “Re-analyze” to try again.',
     reanalyzeFailed: 'The meeting could not be re-analysed.',
   },
   live: {
+    analysisMode: 'Analysis mode',
+    highlightsMode: 'Key moments',
+    highlightsHint: 'Key points, decisions and important commitments. No task cards are created.',
+    highlightDecisions: 'Decisions',
     participantsCount: (n: number) => `${n} Participants`,
     systemAudio: 'System audio',
     pauseMic: 'Pause microphone',
@@ -230,6 +251,7 @@ export const en = {
     systemAudioFailed: 'System audio could not be captured.',
   },
   taskForm: {
+    pastDeadline: 'The deadline cannot be in the past.',
     editTitle: 'Edit task',
     newTitle: 'New task',
     editSubtitle: 'Update the details of this action item.',
@@ -250,6 +272,8 @@ export const en = {
     createTask: 'Create task',
   },
   meetingForm: {
+    startsNow: 'Starts right now',
+    pastTime: 'That time has already passed. Pick a time from now on, or start the meeting now.',
     title: 'New meeting',
     subtitle: 'Schedule a meeting or start recording right away.',
     titleField: 'Title',
@@ -265,6 +289,7 @@ export const en = {
     schedule: 'Schedule',
   },
   upload: {
+    futureDate: 'A recording cannot be dated in the future.',
     title: 'Upload a recording',
     subtitle: 'Transcribe an existing audio or video file and extract its action items.',
     stageUploading: 'Uploading the recording',
@@ -334,7 +359,14 @@ export const en = {
     emailPlaceholder: 'name@company.com',
     role: 'Role',
     rolePlaceholder: 'e.g. Product Designer',
-    roleHint: 'Used to route action items that nobody was named for.',
+    roleHint: 'Pick a suggestion or type any role, even a new one. Used to route action items nobody was named for.',
+    roleSuggestions: 'Suggestions',
+    saving: 'Saving…',
+    saveFailed: 'The team could not be saved.',
+    you: 'you',
+    removing: 'Removing…',
+    removeFailed: 'The member could not be removed.',
+    saved: 'Saved',
     updateMember: 'Update member',
     addMemberButton: 'Add member',
     saveTeam: 'Save team',
@@ -342,6 +374,18 @@ export const en = {
     removeLabel: (name: string) => `Remove ${name}`,
     removeTitle: 'Remove member',
     removeMessage: (name: string) => `${name} will be removed. Tasks assigned to them become unassigned.`,
+  },
+  picker: {
+    chooseDate: 'Choose a date',
+    chooseDateTime: 'Choose date and time',
+    prevMonth: 'Previous month',
+    nextMonth: 'Next month',
+    time: 'Time',
+    hours: 'Hours',
+    minutes: 'Minutes',
+    today: 'Today',
+    now: 'Now',
+    done: 'Done',
   },
 };
 

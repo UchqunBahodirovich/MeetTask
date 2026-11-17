@@ -1,15 +1,18 @@
 import React from 'react';
-import { Calendar, Clock, Users, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { Calendar, Clock, Users, ChevronRight, CheckCircle2, Trash2 } from 'lucide-react';
 import { Meeting } from '../types';
 import { format } from 'date-fns';
 import { useI18n } from '../i18n';
+import { Avatar } from './ui/Avatar';
 
 interface MeetingCardProps {
   meeting: Meeting;
   onClick: () => void;
+  /** Omitted when the signed-in role may not delete meetings. */
+  onDelete?: () => void;
 }
 
-export const MeetingCard: React.FC<MeetingCardProps> = ({ meeting, onClick }) => {
+export const MeetingCard: React.FC<MeetingCardProps> = ({ meeting, onClick, onDelete }) => {
   const { t, dateLocale } = useI18n();
   const statusStyles: Record<Meeting['status'], string> = {
     completed: 'bg-slate-100 text-slate-600',
@@ -35,7 +38,23 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({ meeting, onClick }) =>
             </span>
           )}
         </div>
-        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+        <div className="flex items-center gap-1">
+          {onDelete && (
+            <button
+              type="button"
+              // The whole card navigates, so the delete button must not bubble.
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete();
+              }}
+              aria-label={t.summary.deleteMeetingLabel(meeting.title)}
+              className="p-1.5 rounded-lg text-slate-300 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+        </div>
       </div>
 
       <h3 className="font-semibold text-slate-900 mb-2 group-hover:text-blue-600 transition-colors">
@@ -56,17 +75,15 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({ meeting, onClick }) =>
       <div className="flex items-center justify-between pt-4 border-t border-slate-50">
         <div className="flex -space-x-2">
           {meeting.participants.slice(0, 3).map((p, i) => (
-            <div key={i} className="w-7 h-7 rounded-full border-2 border-white bg-slate-200 overflow-hidden">
-              <img src={p.avatar} alt={p.name} className="w-full h-full object-cover" />
-            </div>
+            <Avatar key={i} name={p.name} src={p.avatar} className="w-7 h-7 border-2 border-white" textClassName="text-[9px]" />
           ))}
           {meeting.participants.length > 3 && (
-            <div className="w-7 h-7 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500">
+            <div className="w-7 h-7 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-600">
               +{meeting.participants.length - 3}
             </div>
           )}
         </div>
-        <div className="flex items-center gap-1 text-xs text-slate-400">
+        <div className="flex items-center gap-1 text-xs text-slate-500">
           <Users className="w-3 h-3" />
           {meeting.participants.length}
         </div>

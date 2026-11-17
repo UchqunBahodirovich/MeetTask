@@ -5,6 +5,7 @@ import { MeetingCard } from '../components/MeetingCard';
 import { TaskCard } from '../components/TaskCard';
 import { useI18n } from '../i18n';
 import { TrendingUp, Users, Clock, CheckCircle2, ArrowUpRight, Plus } from 'lucide-react';
+import { useTheme } from '../hooks/useTheme';
 import {
   BarChart,
   Bar,
@@ -49,6 +50,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onNewMeeting,
 }) => {
   const { t, dateLocale } = useI18n();
+  const { theme } = useTheme();
   const upcomingMeetings = meetings.filter((m) => m.status === 'upcoming');
   const pastMeetings = meetings.filter((m) => m.status === 'completed');
   const pendingTasks = tasks.filter((t) => !t.isApproved && t.isAiGenerated);
@@ -113,7 +115,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <h1 className="text-3xl font-bold text-slate-900">{t.dashboard.welcome(displayName.split(' ')[0])}</h1>
           <p className="text-slate-500 mt-1">{t.dashboard.subtitle}</p>
         </div>
-        <p className="text-sm font-medium text-slate-400">{format(new Date(), 'EEEE, MMMM d', { locale: dateLocale })}</p>
+        <p className="text-sm font-medium text-slate-500">{format(new Date(), 'EEEE, MMMM d', { locale: dateLocale })}</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -155,7 +157,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               ))}
               {upcomingMeetings.length === 0 && (
                 <div className="md:col-span-2 py-12 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-                  <p className="text-slate-400 font-medium">{t.dashboard.noUpcoming}</p>
+                  <p className="text-slate-500 font-medium">{t.dashboard.noUpcoming}</p>
                   <button
                     type="button"
                     onClick={onNewMeeting}
@@ -172,30 +174,33 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-slate-900">{t.dashboard.tasksByStatus}</h2>
-              <span className="text-xs font-medium text-slate-400">{t.dashboard.totalCount(tasks.length)}</span>
+              <span className="text-xs font-medium text-slate-500">{t.dashboard.totalCount(tasks.length)}</span>
             </div>
             <div className="bg-white p-6 rounded-2xl border border-slate-200 h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 640, height: 248 }}>
                 <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#292c33' : '#f1f5f9'} />
                   <XAxis
                     dataKey="name"
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fill: '#94a3b8', fontSize: 12 }}
+                    tick={{ fill: theme === 'dark' ? '#a0abba' : '#94a3b8', fontSize: 12 }}
                     dy={10}
                   />
                   <YAxis
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fill: '#94a3b8', fontSize: 12 }}
+                    tick={{ fill: theme === 'dark' ? '#a0abba' : '#94a3b8', fontSize: 12 }}
                     allowDecimals={false}
                   />
                   <Tooltip
-                    cursor={{ fill: '#f8fafc' }}
+                    cursor={{ fill: theme === 'dark' ? '#1b1d22' : '#f8fafc' }}
+                    wrapperClassName="dashboard-chart-tooltip"
                     contentStyle={{
+                      background: theme === 'dark' ? '#15171b' : '#ffffff',
+                      color: theme === 'dark' ? '#e2e8f0' : '#0f172a',
                       borderRadius: 12,
-                      border: '1px solid #e2e8f0',
+                      border: `1px solid ${theme === 'dark' ? '#343842' : '#e2e8f0'}`,
                       fontSize: 12,
                       boxShadow: '0 8px 24px rgba(15,23,42,0.08)',
                     }}
@@ -231,7 +236,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               ))}
               {pendingTasks.length === 0 && (
                 <div className="py-8 text-center bg-slate-50 rounded-2xl border border-slate-100">
-                  <p className="text-slate-400 text-sm">{t.dashboard.allReviewed}</p>
+                  <p className="text-slate-500 text-sm">{t.dashboard.allReviewed}</p>
                 </div>
               )}
             </div>
@@ -247,7 +252,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   onClick={() => onMeetingClick(m)}
                   className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-100 transition-all cursor-pointer group text-left"
                 >
-                  <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors shrink-0">
+                  <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors shrink-0">
                     <Clock className="w-5 h-5" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -260,7 +265,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </button>
               ))}
               {pastMeetings.length === 0 && (
-                <p className="text-sm text-slate-400 px-3">{t.dashboard.noCompleted}</p>
+                <p className="text-sm text-slate-500 px-3">{t.dashboard.noCompleted}</p>
               )}
             </div>
           </section>

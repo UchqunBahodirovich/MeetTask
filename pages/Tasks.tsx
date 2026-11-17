@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import type { PanInfo } from 'framer-motion';
 import {
   List,
   LayoutGrid,
@@ -18,6 +19,9 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { EMPTY_TASK_FILTERS } from '../constants';
 import { useTeam } from '../context/TeamContext';
 import { useI18n } from '../i18n';
+import { projectMomentum } from '../components/ui/motion';
+import { taskAssigneeIds } from '../services/taskAssignees';
+import { Select } from '../components/ui/Select';
 
 interface TasksPageProps {
   tasks: Task[];
@@ -48,8 +52,6 @@ const STATUS_DOT: Record<TaskStatus, string> = {
   review: 'bg-orange-500',
   completed: 'bg-green-500',
 };
-
-const DND_MIME = 'application/x-meettask-task';
 
 const CheckRow: React.FC<{
   label: React.ReactNode;
@@ -106,7 +108,10 @@ export const TasksPage: React.FC<TasksPageProps> = ({
       if (q && !`${task.title} ${task.description ?? ''}`.toLowerCase().includes(q)) return false;
       if (filters.statuses.length && !filters.statuses.includes(task.status)) return false;
       if (filters.priorities.length && !filters.priorities.includes(task.priority)) return false;
-      if (filters.assigneeIds.length && !filters.assigneeIds.includes(task.assigneeId || 'unassigned')) return false;
+      const owners = taskAssigneeIds(task);
+      if (filters.assigneeIds.length && !filters.assigneeIds.some((id) =>
+        id === 'unassigned' ? owners.length === 0 : owners.includes(id),
+      )) return false;
       if (filters.meetingIds.length && !filters.meetingIds.includes(task.meetingId || 'none')) return false;
       if (filters.aiOnly && !task.isAiGenerated) return false;
       if (filters.pendingApprovalOnly && !(task.isAiGenerated && !task.isApproved)) return false;
@@ -116,45 +121,68 @@ export const TasksPage: React.FC<TasksPageProps> = ({
 
   const getTasksByStatus = (status: TaskStatus) => filteredTasks.filter((t) => t.status === status);
 
-  const handleDragStart = (task: Task) => (e: React.DragEvent<HTMLDivElement>) => {
-    e.dataTransfer.setData(DND_MIME, task.id);
-    e.dataTransfer.effectAllowed = 'move';
+  const columnRectsRef = useRef<{ id: TaskStatus; left: number; right: number }[]>([]);
+  const cardMidsRef = useRef<Record<string, { id: string; midY: number }[]>>({});
+
+  /** Cache column and card geometry once per drag so each frame stays cheap. */
+  const handleDragStart = (task: Task) => () => {
+    const mids: Record<string, { id: string; midY: number }[]> = {};
+    columnRectsRef.current = COLUMNS.map((col) => {
+      const element = document.querySelector(`[data-column="${col.id}"]`);
+      const rect = element?.getBoundingClientRect();
+      mids[col.id] = Array.from(element?.querySelectorAll('[data-task-id]') ?? []).map((card) => {
+        const cardRect = card.getBoundingClientRect();
+        return { id: (card as HTMLElement).dataset.taskId ?? '', midY: cardRect.top + cardRect.height / 2 };
+      });
+      return { id: col.id, left: rect?.left ?? 0, right: rect?.right ?? 0 };
+    });
+    cardMidsRef.current = mids;
     setDraggingId(task.id);
   };
 
-  const handleDragEnd = () => {
+  /** Which column sits under an x position, or the nearest one past the edges. */
+  const columnAt = (x: number): TaskStatus | null => {
+    const rects = columnRectsRef.current;
+    if (rects.length === 0) return null;
+    const hit = rects.find((rect) => x >= rect.left && x <= rect.right);
+    if (hit) return hit.id;
+    return x < rects[0].left ? rects[0].id : rects[rects.length - 1].id;
+  };
+
+  // Feedback follows the pointer the whole way through, not only on release.
+  const handleDrag = () => (info: PanInfo) => {
+    const next = columnAt(info.point.x);
+    if (next !== overColumn) setOverColumn(next);
+  };
+
+  const handleDragEnd = (task: Task) => (info: PanInfo) => {
+    // Land where the flick was going, not where the finger happened to stop.
+    // Snap targets here are dense columns, so the throw is capped at half a
+    // column: momentum decides the outcome when the card is released near a
+    // boundary, but a card let go over a column stays in that column however
+    // fast the pointer was still moving.
+    const rects = columnRectsRef.current;
+    const columnWidth = rects.length ? rects[0].right - rects[0].left : 240;
+    const carry = (velocity: number) => {
+      const limit = columnWidth / 2;
+      return Math.max(-limit, Math.min(limit, projectMomentum(velocity, 0.99)));
+    };
+
+    const projectedX = info.point.x + carry(info.velocity.x);
+    const projectedY = info.point.y + carry(info.velocity.y);
+    const target = columnAt(projectedX) ?? columnAt(info.point.x);
+
+    if (target) {
+      // Insert above the first card the projected landing point sits before.
+      const before = (cardMidsRef.current[target] ?? []).find(
+        (card) => card.id !== task.id && projectedY < card.midY,
+      );
+      const movedColumn = target !== task.status;
+      if (movedColumn || before) onTaskMove(task.id, target, before?.id);
+    }
+
     setDraggingId(null);
     setOverColumn(null);
-  };
-
-  const handleColumnDragOver = (status: TaskStatus) => (e: React.DragEvent<HTMLDivElement>) => {
-    if (!draggingId) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (overColumn !== status) setOverColumn(status);
-  };
-
-  const readDraggedId = (e: React.DragEvent) => e.dataTransfer.getData(DND_MIME) || draggingId;
-
-  const handleColumnDrop = (status: TaskStatus) => (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const id = readDraggedId(e);
-    if (id) onTaskMove(id, status);
-    handleDragEnd();
-  };
-
-  const handleCardDrop = (target: Task) => (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const id = readDraggedId(e);
-    if (id && id !== target.id) onTaskMove(id, target.status, target.id);
-    handleDragEnd();
-  };
-
-  const handleCardDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    if (!draggingId) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
   };
 
   const meetingTitle = (meetingId: string) => meetings.find((m) => m.id === meetingId)?.title ?? '—';
@@ -226,7 +254,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({
           <p className="text-slate-500 mt-1">
             {t.tasks.subtitle}
             {view === 'kanban' && (
-              <span className="hidden md:inline text-slate-400">{t.tasks.dragHint}</span>
+              <span className="hidden md:inline text-slate-500">{t.tasks.dragHint}</span>
             )}
           </p>
         </div>
@@ -237,7 +265,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({
               onClick={() => setView('kanban')}
               aria-label={t.tasks.kanbanView}
               aria-pressed={view === 'kanban'}
-              className={`p-2 rounded-lg transition-all ${view === 'kanban' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`p-2 rounded-lg transition-all ${view === 'kanban' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-600'}`}
             >
               <LayoutGrid className="w-4 h-4" />
             </button>
@@ -246,7 +274,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({
               onClick={() => setView('list')}
               aria-label={t.tasks.listView}
               aria-pressed={view === 'list'}
-              className={`p-2 rounded-lg transition-all ${view === 'list' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`p-2 rounded-lg transition-all ${view === 'list' ? 'bg-slate-100 text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-600'}`}
             >
               <List className="w-4 h-4" />
             </button>
@@ -302,7 +330,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({
                 </div>
 
                 <div>
-                  <p className="px-2 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.tasks.filterStatus}</p>
+                  <p className="px-2 pb-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t.tasks.filterStatus}</p>
                   {COLUMNS.map((c) => (
                     <CheckRow
                       key={c.id}
@@ -314,7 +342,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({
                 </div>
 
                 <div>
-                  <p className="px-2 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.tasks.filterPriority}</p>
+                  <p className="px-2 pb-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t.tasks.filterPriority}</p>
                   {PRIORITIES.map((p) => (
                     <CheckRow
                       key={p}
@@ -326,7 +354,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({
                 </div>
 
                 <div>
-                  <p className="px-2 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.tasks.filterAssignee}</p>
+                  <p className="px-2 pb-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t.tasks.filterAssignee}</p>
                   {team.map((u) => (
                     <CheckRow
                       key={u.id}
@@ -343,7 +371,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({
                 </div>
 
                 <div>
-                  <p className="px-2 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.tasks.filterMeeting}</p>
+                  <p className="px-2 pb-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t.tasks.filterMeeting}</p>
                   {meetings.map((m) => (
                     <CheckRow
                       key={m.id}
@@ -399,7 +427,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({
 
       {view === 'kanban' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-          {COLUMNS.map((col) => {
+          {COLUMNS.map((col, columnIndex) => {
             const colTasks = getTasksByStatus(col.id);
             const isOver = overColumn === col.id && draggingId !== null;
             return (
@@ -408,7 +436,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({
                   <div className="flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full ${col.dot}`}></div>
                     <h3 className="font-bold text-sm text-slate-900 uppercase tracking-wider">{columnLabel(col.id)}</h3>
-                    <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                    <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">
                       {colTasks.length}
                     </span>
                   </div>
@@ -416,7 +444,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({
                     type="button"
                     onClick={() => onCreateTask(col.id)}
                     aria-label={t.tasks.addToColumn(columnLabel(col.id))}
-                    className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg p-1 transition-colors"
+                    className="text-slate-500 hover:text-slate-600 hover:bg-slate-100 rounded-lg p-1 transition-colors"
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -424,13 +452,8 @@ export const TasksPage: React.FC<TasksPageProps> = ({
 
                 <div
                   data-column={col.id}
-                  onDragOver={handleColumnDragOver(col.id)}
-                  onDragLeave={(e) => {
-                    // Only clear when leaving the column itself, not when moving between its children.
-                    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOverColumn(null);
-                  }}
-                  onDrop={handleColumnDrop(col.id)}
-                  className={`flex-1 rounded-2xl p-3 border min-h-[160px] lg:min-h-[600px] space-y-4 transition-colors ${
+                  data-over={isOver ? 'true' : 'false'}
+                  className={`task-kanban-column flex-1 rounded-2xl p-3 border min-h-[160px] lg:min-h-[600px] space-y-4 transition-colors ${
                     isOver ? `border-dashed ${col.ring}` : 'bg-slate-50/50 border-slate-100'
                   }`}
                 >
@@ -443,23 +466,50 @@ export const TasksPage: React.FC<TasksPageProps> = ({
                       isDragging={draggingId === task.id}
                       isFocused={focusedTaskId === task.id}
                       onDragStart={handleDragStart(task)}
-                      onDragEnd={handleDragEnd}
-                      onDragOver={handleCardDragOver}
-                      onDrop={handleCardDrop(task)}
+                      onDrag={handleDrag()}
+                      onDragEnd={handleDragEnd(task)}
                       onApprove={() => onTaskApprove(task.id)}
                       onEdit={() => onEditTask(task)}
                       onDelete={() => setPendingDelete(task)}
+                      onMovePrevious={
+                        columnIndex > 0
+                          ? {
+                              label: t.taskCard.moveLeft(columnLabel(COLUMNS[columnIndex - 1].id)),
+                              move: () => onTaskMove(task.id, COLUMNS[columnIndex - 1].id),
+                            }
+                          : undefined
+                      }
+                      onMoveNext={
+                        columnIndex < COLUMNS.length - 1
+                          ? {
+                              label: t.taskCard.moveRight(columnLabel(COLUMNS[columnIndex + 1].id)),
+                              move: () => onTaskMove(task.id, COLUMNS[columnIndex + 1].id),
+                            }
+                          : undefined
+                      }
                     />
                   ))}
                   {colTasks.length === 0 && (
                     <div
-                      className={`h-32 flex items-center justify-center border-2 border-dashed rounded-xl transition-colors ${
+                      className={`task-kanban-empty h-32 flex items-center justify-center border-2 border-dashed rounded-xl transition-colors ${
                         isOver ? 'border-blue-300 bg-white/60' : 'border-slate-200'
                       }`}
                     >
-                      <p className="text-xs font-medium text-slate-400">
-                        {isOver ? t.tasks.dropHere : activeFilterCount > 0 ? t.tasks.noMatches : t.tasks.noTasks}
-                      </p>
+                      {isOver || activeFilterCount > 0 ? (
+                        <p className="text-xs font-medium text-slate-500">
+                          {isOver ? t.tasks.dropHere : t.tasks.noMatches}
+                        </p>
+                      ) : (
+                        // An empty column should offer the next step, not just report emptiness.
+                        <button
+                          type="button"
+                          onClick={() => onCreateTask(col.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          {t.tasks.addTask}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -473,11 +523,11 @@ export const TasksPage: React.FC<TasksPageProps> = ({
             <table className="w-full text-left border-collapse min-w-[720px]">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">{t.tasks.colTask}</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">{t.tasks.colMeeting}</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">{t.tasks.colPriority}</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">{t.tasks.colDeadline}</th>
-                  <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">{t.tasks.colStatus}</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t.tasks.colTask}</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t.tasks.colMeeting}</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t.tasks.colPriority}</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t.tasks.colDeadline}</th>
+                  <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">{t.tasks.colStatus}</th>
                   <th className="px-6 py-4"></th>
                 </tr>
               </thead>
@@ -524,18 +574,13 @@ export const TasksPage: React.FC<TasksPageProps> = ({
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <select
+                      <Select
                         value={task.status}
-                        onChange={(e) => onTaskMove(task.id, e.target.value as TaskStatus)}
-                        aria-label={t.tasks.statusFor(task.title)}
-                        className="text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-blue-500"
-                      >
-                        {COLUMNS.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {columnLabel(c.id)}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(status) => onTaskMove(task.id, status)}
+                        options={COLUMNS.map((c) => ({ value: c.id, label: columnLabel(c.id) }))}
+                        ariaLabel={t.tasks.statusFor(task.title)}
+                        className="min-w-[124px] text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-blue-500"
+                      />
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex justify-end">{rowMenu(task)}</div>
@@ -544,7 +589,7 @@ export const TasksPage: React.FC<TasksPageProps> = ({
                 ))}
                 {filteredTasks.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-400">
+                    <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-500">
                       {tasks.length === 0 ? t.tasks.noTasksYet : t.tasks.noFilterMatches}
                     </td>
                   </tr>

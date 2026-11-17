@@ -1,0 +1,11 @@
+.git
+.gitignore
+node_modules
+dist
+.firebase
+.agents
+.claude
+*.log
+.env
+.env.*
+!.env.example

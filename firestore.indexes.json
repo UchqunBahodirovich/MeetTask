@@ -1,0 +1,11 @@
+{
+  "indexes": [
+    {"collectionGroup":"meetings","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"date","order":"DESCENDING"}]},
+    {"collectionGroup":"tasks","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"updatedAt","order":"DESCENDING"}]},
+    {"collectionGroup":"tasks","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"meetingId","order":"ASCENDING"},{"fieldPath":"isAiGenerated","order":"ASCENDING"}]},
+    {"collectionGroup":"workspaceMembers","queryScope":"COLLECTION","fields":[{"fieldPath":"workspaceId","order":"ASCENDING"},{"fieldPath":"accessRole","order":"ASCENDING"}]},
+    {"collectionGroup":"notifications","queryScope":"COLLECTION","fields":[{"fieldPath":"userId","order":"ASCENDING"},{"fieldPath":"createdAt","order":"DESCENDING"}]},
+    {"collectionGroup":"transcriptLines","queryScope":"COLLECTION","fields":[{"fieldPath":"meetingId","order":"ASCENDING"},{"fieldPath":"orderIndex","order":"ASCENDING"}]}
+  ],
+  "fieldOverrides": []
+}

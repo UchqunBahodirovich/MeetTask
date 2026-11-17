@@ -5,8 +5,10 @@ import { Field, inputClass } from './ui/Field';
 import { Meeting, MeetingAnalysis, Task } from '../types';
 import { useTeam } from '../context/TeamContext';
 import { useI18n } from '../i18n';
+import { Avatar } from './ui/Avatar';
 import { analyzeMeeting, transcribeRecording, type TranscribeStage } from '../services/meetingApi';
 import { analysisToTasks } from '../services/analysis';
+import { DateTimePicker } from './ui/DateTimePicker';
 
 interface UploadRecordingModalProps {
   open: boolean;
@@ -28,6 +30,7 @@ const formatBytes = (bytes: number) => {
 const titleFromFile = (name: string) =>
   name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Uploaded recording';
 
+/** Local `YYYY-MM-DDTHH:mm`, the format the date-time picker works with. */
 const toLocalInputValue = (date: Date) => {
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
@@ -35,7 +38,7 @@ const toLocalInputValue = (date: Date) => {
 
 export const UploadRecordingModal: React.FC<UploadRecordingModalProps> = ({ open, onClose, onComplete }) => {
   const { team } = useTeam();
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [date, setDate] = useState('');
@@ -98,6 +101,11 @@ export const UploadRecordingModal: React.FC<UploadRecordingModalProps> = ({ open
     const participants = team.filter((u) => participantIds.includes(u.id));
     const meetingId = `upload-${Date.now()}`;
     const parsedDate = date ? new Date(date) : new Date();
+    if (parsedDate.getTime() > Date.now() + 60_000) {
+      // A recording documents something that already happened.
+      setError(t.upload.futureDate);
+      return;
+    }
     const hints = languageHints
       .split(',')
       .map((code) => code.trim())
@@ -132,6 +140,7 @@ export const UploadRecordingModal: React.FC<UploadRecordingModalProps> = ({ open
       let analysis: MeetingAnalysis | null = null;
       try {
         analysis = await analyzeMeeting(meetingShell, result.transcript, {
+          language,
           signal: controller.signal,
           onProgress: setAnalysisChunk,
         });
@@ -148,7 +157,9 @@ export const UploadRecordingModal: React.FC<UploadRecordingModalProps> = ({ open
         setError(t.upload.partial(analysis.failedChunks ?? 0));
       }
 
-      const tasks = analysis ? analysisToTasks(analysis, meetingShell, 'upload') : [];
+      const tasks = analysis
+        ? analysisToTasks(analysis, meetingShell, 'upload')
+        : [];
       const meeting: Meeting = {
         ...meetingShell,
         transcript: result.transcript,
@@ -242,7 +253,7 @@ export const UploadRecordingModal: React.FC<UploadRecordingModalProps> = ({ open
                   type="button"
                   onClick={() => setFile(null)}
                   aria-label={t.upload.removeFile}
-                  className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                  className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-200 hover:text-slate-700"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -250,7 +261,7 @@ export const UploadRecordingModal: React.FC<UploadRecordingModalProps> = ({ open
             </div>
           ) : (
             <>
-              <Upload className="w-6 h-6 text-slate-400 mx-auto mb-2" />
+              <Upload className="w-6 h-6 text-slate-500 mx-auto mb-2" />
               <p className="text-sm font-medium text-slate-600">{t.upload.dropHere}</p>
               <button
                 type="button"
@@ -259,7 +270,7 @@ export const UploadRecordingModal: React.FC<UploadRecordingModalProps> = ({ open
               >
                 {t.upload.chooseFile}
               </button>
-              <p className="text-xs text-slate-400 mt-2">{t.upload.fileHint}</p>
+              <p className="text-xs text-slate-500 mt-2">{t.upload.fileHint}</p>
             </>
           )}
         </div>
@@ -273,7 +284,7 @@ export const UploadRecordingModal: React.FC<UploadRecordingModalProps> = ({ open
                 <div key={id} className="flex items-center gap-2.5 text-sm">
                   <span
                     className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
-                      done ? 'bg-green-100 text-green-600' : active ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-400'
+                      done ? 'bg-green-100 text-green-600' : active ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-500'
                     }`}
                   >
                     {done ? (
@@ -305,7 +316,7 @@ export const UploadRecordingModal: React.FC<UploadRecordingModalProps> = ({ open
               </div>
             )}
             {stage === 'transcribing' && (
-              <p className="text-xs text-slate-400 pt-1">
+              <p className="text-xs text-slate-500 pt-1">
                 {t.upload.longHint}
               </p>
             )}
@@ -317,7 +328,7 @@ export const UploadRecordingModal: React.FC<UploadRecordingModalProps> = ({ open
                     style={{ width: `${Math.round((analysisChunk.index / analysisChunk.total) * 100)}%` }}
                   />
                 </div>
-                <p className="text-xs text-slate-400 pt-1">
+                <p className="text-xs text-slate-500 pt-1">
                   {t.upload.partsHint(analysisChunk.total)}
                 </p>
               </>
@@ -343,11 +354,12 @@ export const UploadRecordingModal: React.FC<UploadRecordingModalProps> = ({ open
             />
           </Field>
           <Field label={t.upload.recordedOn} htmlFor="upload-date">
-            <input
+            <DateTimePicker
               id="upload-date"
-              type="datetime-local"
+              withTime
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={setDate}
+              max={new Date()}
               disabled={busy}
               className={inputClass}
             />
@@ -388,10 +400,10 @@ export const UploadRecordingModal: React.FC<UploadRecordingModalProps> = ({ open
                     selected ? 'border-blue-500 bg-blue-50/70 text-slate-900' : 'border-slate-200 hover:bg-slate-50 text-slate-600'
                   }`}
                 >
-                  <img src={user.avatar} alt="" className="w-6 h-6 rounded-full bg-slate-200 shrink-0" />
+                  <Avatar name={user.name} src={user.avatar} className="w-6 h-6" textClassName="text-[9px]" />
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-medium truncate">{user.name}</span>
-                    {user.role && <span className="block text-[10px] text-slate-400 truncate">{user.role}</span>}
+                    {user.role && <span className="block text-[10px] text-slate-500 truncate">{user.role}</span>}
                   </span>
                   {selected && <Check className="w-4 h-4 text-blue-600 shrink-0" />}
                 </button>

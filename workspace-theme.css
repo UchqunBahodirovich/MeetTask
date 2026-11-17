@@ -1,0 +1,86 @@
+/* Workspace surfaces share the landing's neutral light/dark palette. */
+[data-theme=dark] .workspace-shell { background:#09090b; color:#f1f5f9; color-scheme:dark; }
+[data-theme=dark] .workspace-shell .bg-white { background-color:#101114; }
+[data-theme=dark] .workspace-shell .bg-slate-50 { background-color:#09090b; }
+[data-theme=dark] .workspace-shell .bg-slate-100 { background-color:#1b1d22; }
+[data-theme=dark] .workspace-shell .bg-slate-200 { background-color:#292c33; }
+[data-theme=dark] .workspace-shell :is(.text-slate-900,.text-slate-800,.text-slate-700) { color:#e2e8f0; }
+[data-theme=dark] .workspace-shell :is(.text-slate-600,.text-slate-500,.text-slate-400) { color:#a0abba; }
+[data-theme=dark] .workspace-shell :is(.border-slate-50,.border-slate-100,.border-slate-200,.border-slate-300) { border-color:#292c33; }
+[data-theme=dark] .workspace-shell :is(.hover\:bg-slate-50,.hover\:bg-slate-100):hover { background-color:#21242b; }
+[data-theme=dark] .workspace-shell :is(.bg-blue-50,.bg-blue-100) { background-color:#152842; }
+[data-theme=dark] .workspace-shell :is(.text-blue-500,.text-blue-600,.text-blue-700,.text-blue-800,.text-blue-900) { color:#70b2ff; }
+[data-theme=dark] .workspace-shell :is(.bg-green-50,.bg-green-100) { background-color:#10271d; }
+[data-theme=dark] .workspace-shell :is(.text-green-500,.text-green-600,.text-green-700,.text-green-800,.text-green-900) { color:#4ade80; }
+[data-theme=dark] .workspace-shell :is(.bg-purple-50,.bg-purple-100,.bg-violet-50,.bg-violet-100) { background-color:#27183a; }
+[data-theme=dark] .workspace-shell :is(.text-purple-600,.text-purple-700,.text-violet-600,.text-violet-700) { color:#c084fc; }
+[data-theme=dark] .workspace-shell :is(.bg-orange-50,.bg-orange-100) { background-color:#301b0e; }
+[data-theme=dark] .workspace-shell :is(.text-orange-500,.text-orange-600,.text-orange-700,.text-orange-800,.text-orange-900) { color:#fb923c; }
+[data-theme=dark] .workspace-shell :is(.bg-red-50,.bg-red-100) { background-color:#321416; }
+[data-theme=dark] .workspace-shell :is(.text-red-500,.text-red-600,.text-red-700,.text-red-800,.text-red-900) { color:#f87171; }
+[data-theme=dark] .workspace-shell :is(.bg-amber-50,.bg-amber-100) { background-color:#30240c; }
+[data-theme=dark] .workspace-shell :is(.text-amber-600,.text-amber-700,.text-amber-800,.text-amber-900,.text-amber-950) { color:#fbbf24; }
+[data-theme=dark] .workspace-shell :is(.bg-emerald-50,.bg-emerald-100) { background-color:#0d2921; }
+[data-theme=dark] .workspace-shell :is(.text-emerald-600,.text-emerald-700) { color:#34d399; }
+[data-theme=dark] .workspace-shell :is(.bg-rose-50,.bg-rose-100) { background-color:#321720; }
+[data-theme=dark] .workspace-shell :is(.text-rose-600,.text-rose-700) { color:#fb7185; }
+[data-theme=dark] .workspace-shell :is(.bg-sky-50,.bg-sky-100) { background-color:#102a3b; }
+[data-theme=dark] .workspace-shell :is(.text-sky-600,.text-sky-700) { color:#38bdf8; }
+[data-theme=dark] .workspace-shell :is(.border-blue-100,.border-blue-200,.border-blue-300,.border-blue-400,.border-green-100,.border-green-200,.border-green-300,.border-purple-100,.border-purple-200,.border-orange-100,.border-orange-200,.border-orange-300,.border-red-100,.border-red-200,.border-red-300,.border-amber-100,.border-amber-200) { border-color:#343842; }
+[data-theme=dark] .workspace-shell :is(.hover\:bg-blue-50,.hover\:bg-green-50,.hover\:bg-purple-50,.hover\:bg-orange-50,.hover\:bg-red-50,.hover\:bg-amber-50):hover { background-color:#20242b; }
+[data-theme=dark] .workspace-shell :is(.hover\:bg-blue-50\/40,.hover\:bg-blue-50\/50,.hover\:bg-blue-50\/60,.hover\:bg-blue-50\/70):hover { background-color:rgb(21 40 66 / .9); }
+[data-theme=dark] .workspace-shell :is(.hover\:bg-slate-50\/40,.hover\:bg-slate-50\/50,.hover\:bg-slate-50\/60):hover { background-color:#21242b; }
+[data-theme=dark] .workspace-shell .bg-blue-600 { color:#fff; }
+[data-theme=dark] .workspace-shell .app-material { background:#101114ed; border-color:#292c33; }
+[data-theme=dark] .workspace-shell input,[data-theme=dark] .workspace-shell textarea,[data-theme=dark] .workspace-shell select { color:#e2e8f0; background-color:#14161a; border-color:#343842; }
+[data-theme=dark] .workspace-shell input::placeholder,[data-theme=dark] .workspace-shell textarea::placeholder { color:#919bab; }
+[data-theme=dark] .workspace-shell .shadow-blue-200 { --tw-shadow-color:rgb(37 99 235 / .28); --tw-shadow:var(--tw-shadow-colored); }
+[data-theme=dark] .workspace-shell .shadow-red-200 { --tw-shadow-color:rgb(220 38 38 / .24); --tw-shadow:var(--tw-shadow-colored); }
+[data-theme=dark] .workspace-shell .auth-card { box-shadow:0 24px 60px -32px rgb(0 0 0 / .9); }
+[data-theme=dark] .workspace-shell .dashboard-chart-tooltip { background:#15171b !important; border-color:#343842 !important; color:#e2e8f0 !important; }
+[data-theme=dark] .workspace-shell :is(.bg-white\/60,.bg-white\/80) { background-color:rgb(16 17 20 / .94); }
+[data-theme=dark] .workspace-shell :is(.bg-slate-50\/30,.bg-slate-50\/40,.bg-slate-50\/50,.bg-slate-50\/60,.bg-slate-100\/70) { background-color:rgb(24 26 31 / .82); }
+[data-theme=dark] .workspace-shell :is(.bg-blue-50\/40,.bg-blue-50\/50,.bg-blue-50\/60,.bg-blue-50\/70) { background-color:rgb(21 40 66 / .88); }
+[data-theme=dark] .workspace-shell .bg-green-50\/70 { background-color:rgb(16 39 29 / .88); }
+[data-theme=dark] .workspace-shell .bg-orange-50\/70 { background-color:rgb(48 27 14 / .88); }
+[data-theme=dark] .workspace-shell :is(.shadow-slate-200\/50,.shadow-slate-200\/60,.shadow-slate-400\/30) { --tw-shadow-color:rgb(0 0 0 / .45); --tw-shadow:var(--tw-shadow-colored); }
+[data-theme=dark] .workspace-shell .shadow-blue-500\/5 { --tw-shadow-color:rgb(37 99 235 / .12); --tw-shadow:var(--tw-shadow-colored); }
+[data-theme=dark] .workspace-shell :is(.ring-blue-100,.ring-blue-200,.ring-blue-300) { --tw-ring-color:rgb(59 130 246 / .38); }
+[data-theme=dark] .workspace-shell .app-modal-panel { background:#101114; border-color:#30333b; box-shadow:0 32px 90px -30px rgb(0 0 0 / .95); }
+[data-theme=dark] .workspace-shell .app-modal-footer { background:#15171b; border-color:#30333b; }
+[data-theme=dark] .workspace-shell .app-popover { background:#101114; border-color:#30333b; box-shadow:0 22px 55px -24px rgb(0 0 0 / .95); }
+[data-theme=dark] .workspace-shell .ring-white { --tw-ring-color:#101114; }
+[data-theme=dark] .workspace-shell .task-kanban-column {
+  background:linear-gradient(180deg,rgb(148 163 184 / .055),rgb(15 17 21 / .94) 150px);
+  border-color:#252a32;
+  box-shadow:inset 0 1px rgb(255 255 255 / .025),0 10px 35px -28px rgb(0 0 0 / .9);
+}
+[data-theme=dark] .workspace-shell .task-kanban-column[data-column="in-progress"] {
+  background:linear-gradient(180deg,rgb(59 130 246 / .075),rgb(15 17 21 / .94) 150px);
+}
+[data-theme=dark] .workspace-shell .task-kanban-column[data-column="review"] {
+  background:linear-gradient(180deg,rgb(249 115 22 / .07),rgb(15 17 21 / .94) 150px);
+}
+[data-theme=dark] .workspace-shell .task-kanban-column[data-column="completed"] {
+  background:linear-gradient(180deg,rgb(34 197 94 / .07),rgb(15 17 21 / .94) 150px);
+}
+[data-theme=dark] .workspace-shell .task-kanban-column[data-over="true"] {
+  border-color:#3b82f6;
+  background:linear-gradient(180deg,rgb(37 99 235 / .15),rgb(15 23 42 / .96) 170px);
+}
+[data-theme=dark] .workspace-shell .task-kanban-empty {
+  background:rgb(255 255 255 / .018);
+  border-color:#323741;
+}
+[data-theme=dark] .workspace-shell .task-kanban-column[data-over="true"] .task-kanban-empty {
+  background:rgb(37 99 235 / .08);
+  border-color:#3b82f6;
+}
+.workspace-shell { transition:background-color .2s,color .2s; scrollbar-width:thin; scrollbar-color:#94a3b8 transparent; }
+.workspace-shell * { scrollbar-width:thin; scrollbar-color:#94a3b8 transparent; }
+.workspace-shell ::-webkit-scrollbar { width:7px; height:7px; }
+.workspace-shell ::-webkit-scrollbar-track { background:transparent; }
+.workspace-shell ::-webkit-scrollbar-thumb { background:#94a3b8; border-radius:999px; border:2px solid transparent; background-clip:padding-box; }
+[data-theme=dark] .workspace-shell,[data-theme=dark] .workspace-shell * { scrollbar-color:#3f4652 transparent; }
+[data-theme=dark] .workspace-shell ::-webkit-scrollbar-thumb { background:#3f4652; background-clip:padding-box; }
+@media(prefers-reduced-motion:reduce) { .workspace-shell { transition:none; } }

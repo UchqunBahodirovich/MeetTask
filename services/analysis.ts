@@ -65,6 +65,81 @@ export function findAssignee(assignee: string | null, participants: User[]): Use
   return matches.length === 1 ? matches[0] : undefined;
 }
 
+const roleTokens = (value: string) => new Set(
+  normalize(value).split(/[^\p{L}\p{N}]+/u).filter((token) => token.length > 2),
+);
+
+const ROLE_FAMILIES: Array<{ roles: string[]; tasks: string[] }> = [
+  { roles: ['designer', 'design', 'ux', 'ui'], tasks: ['design', 'dizayn', 'ux', 'ui', 'mockup', 'maket', 'prototype', 'prototip', 'interface', 'interfeys'] },
+  { roles: ['product designer', 'product design', 'ux designer'], tasks: ['user flow', 'foydalanuvchi oqimi', 'journey', 'usability', 'qulaylik', 'confusing', 'chalkash', 'experience', 'tajriba', 'user problem', 'foydalanuvchi muammosi', 'requirement', 'talab'] },
+  { roles: ['ui designer', 'interface designer', 'visual designer'], tasks: ['visual', 'vizual', 'layout', 'joylashuv', 'color', 'rang', 'typography', 'tipografiya', 'component', 'komponent', 'icon', 'ikonka', 'pixel', 'style', 'stil'] },
+  { roles: ['finance', 'financial', 'accountant', 'moliya', 'buxgalter'], tasks: ['finance', 'financial', 'budget', 'byudjet', 'moliya', 'buxgalter', 'price', 'pricing', 'narx', 'cost', 'xarajat', 'invoice', 'hisob faktura'] },
+  { roles: ['backend', 'server', 'api'], tasks: ['backend', 'server', 'api', 'database', 'ma lumotlar bazasi', 'integration', 'integratsiya', 'endpoint', 'webhook'] },
+  { roles: ['frontend', 'web'], tasks: ['frontend', 'react', 'css', 'html', 'web sahifa', 'browser', 'brauzer'] },
+  { roles: ['3d', 'modeler', 'modellovchi'], tasks: ['3d', 'model', 'render', 'texture', 'tekstura', 'animation', 'animatsiya'] },
+  { roles: ['qa', 'tester', 'test', 'quality', 'sifat'], tasks: ['qa', 'test', 'testing', 'sinov', 'bug', 'xato', 'quality', 'sifat'] },
+  { roles: ['marketing', 'marketer', 'smm', 'marketolog'], tasks: ['marketing', 'campaign', 'kampaniya', 'reklama', 'smm', 'seo', 'content', 'kontent'] },
+  { roles: ['sales', 'seller', 'savdo'], tasks: ['sales', 'sale', 'savdo', 'customer', 'mijoz', 'lead', 'deal', 'sotuv'] },
+  { roles: ['legal', 'lawyer', 'yurist', 'huquq'], tasks: ['legal', 'contract', 'shartnoma', 'law', 'qonun', 'yuridik', 'huquq'] },
+  { roles: ['devops', 'sre', 'infrastructure', 'infratuzilma'], tasks: ['deploy', 'deployment', 'devops', 'infrastructure', 'infratuzilma', 'ci', 'cd', 'monitoring'] },
+  { roles: ['data', 'analyst', 'analytics', 'tahlilchi'], tasks: ['data', 'analytics', 'tahlil', 'report', 'hisobot', 'metric', 'metrika', 'dashboard'] },
+];
+
+const normalizedWords = (value: string) => normalize(value).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+const termCount = (value: string, terms: string[]) => {
+  const words = normalizedWords(value);
+  const sentence = ` ${words.join(' ')} `;
+  return terms.filter((rawTerm) => {
+    const term = normalize(rawTerm);
+    if (term.includes(' ')) return sentence.includes(` ${term} `);
+    return words.some((word) => word === term || (term.length >= 4 && word.startsWith(term)));
+  }).length;
+};
+
+/** Infer one unambiguous, exact team role from task vocabulary. */
+export function inferAssigneesByTask(taskText: string, participants: User[]): { role: string; members: User[] } | null {
+  const roles = [...new Set(participants.map((participant) => participant.role).filter(Boolean) as string[])];
+  const taskWords = new Set(normalizedWords(taskText).filter((word) => word.length > 2));
+  let best: { role: string; score: number } | null = null;
+  let tied = false;
+
+  for (const role of roles) {
+    const directMatches = [...roleTokens(role)].filter((word) => taskWords.has(word)).length;
+    let score = directMatches * 3;
+    for (const family of ROLE_FAMILIES) {
+      if (termCount(role, family.roles) > 0) score += termCount(taskText, family.tasks) * 10;
+    }
+    if (!best || score > best.score) {
+      best = { role, score };
+      tied = false;
+    } else if (score > 0 && score === best.score) {
+      tied = true;
+    }
+  }
+
+  if (!best || best.score === 0 || tied) return null;
+  return { role: best.role, members: participants.filter((participant) => participant.role === best.role) };
+}
+
+/** Return everyone with the requested role; tolerate a uniquely matching role phrase. */
+export function findAssigneesByRole(role: string | null, participants: User[]): User[] {
+  if (!role) return [];
+  const exact = participants.filter((participant) => participant.role && normalize(participant.role) === normalize(role));
+  if (exact.length) return exact;
+
+  const wanted = roleTokens(role);
+  if (!wanted.size) return [];
+  const matchingRoles = [...new Set(participants.map((participant) => participant.role).filter(Boolean) as string[])]
+    .filter((participantRole) => {
+      const available = roleTokens(participantRole);
+      return [...wanted].every((token) => available.has(token)) || [...available].every((token) => wanted.has(token));
+    });
+  return matchingRoles.length === 1
+    ? participants.filter((participant) => participant.role === matchingRoles[0])
+    : [];
+}
+
 /** Keep a deadline only when it is a real calendar date; otherwise pass the wording through. */
 function normalizeDeadline(deadline: string | null): string {
   if (!deadline) return 'Belgilanmagan';
@@ -84,22 +159,30 @@ export function analysisToTasks(
   idPrefix = 'ai',
 ): Task[] {
   return analysis.tasks.map((task, index) => {
-    // Someone named in the meeting always wins; a role match is only a fallback.
-    const stated = findAssignee(task.assignee, meeting.participants);
-    const byRole = stated ? undefined : findAssignee(task.suggestedAssignee, meeting.participants);
-    const assignee = stated ?? byRole;
+    const participantIds = new Set(meeting.participants.map((participant) => participant.id));
+    const statedIds = [...new Set(task.assigneeIds.filter((id) => participantIds.has(id)))];
+    const explicitRoleMembers = statedIds.length ? [] : findAssigneesByRole(task.suggestedRole, meeting.participants);
+    const inferredRole = statedIds.length || explicitRoleMembers.length
+      ? null
+      : inferAssigneesByTask(`${task.title} ${task.description}`, meeting.participants);
+    const roleMembers = explicitRoleMembers.length ? explicitRoleMembers : inferredRole?.members ?? [];
+    const assigneeIds = statedIds.length ? statedIds : roleMembers.map((member) => member.id);
+    const assignedByRole = task.assignmentBasis === 'role' || (!statedIds.length && roleMembers.length > 0);
+    const assignmentRole = explicitRoleMembers.length ? task.suggestedRole : inferredRole?.role;
     return {
       id: `${idPrefix}-${meeting.id}-${Date.now()}-${index}`,
       title: task.title,
       description: task.description,
-      assigneeId: assignee?.id ?? '',
+      assigneeId: assigneeIds[0] ?? '',
+      assigneeIds,
       deadline: normalizeDeadline(task.deadline),
       priority: task.priority,
       status: 'todo',
       meetingId: meeting.id,
       isAiGenerated: true,
       isApproved: false,
-      ...(assignee ? { assigneeSource: stated ? ('stated' as const) : ('role' as const) } : {}),
+      ...(assigneeIds.length ? { assigneeSource: assignedByRole ? ('role' as const) : ('stated' as const) } : {}),
+      ...(assignedByRole && assignmentRole ? { assignmentRole } : {}),
     };
   });
 }

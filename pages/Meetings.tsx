@@ -3,21 +3,26 @@ import { Plus, Search, Upload, X } from 'lucide-react';
 import { Meeting } from '../types';
 import { MeetingCard } from '../components/MeetingCard';
 import { useI18n } from '../i18n';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 
 interface MeetingsPageProps {
   meetings: Meeting[];
   onMeetingClick: (meeting: Meeting) => void;
   onNewMeeting: () => void;
   onUploadRecording: () => void;
+  /** Number of tasks that would go with each meeting, for the warning. */
+  taskCountFor: (meetingId: string) => number;
+  onDeleteMeeting?: (meeting: Meeting) => Promise<unknown> | void;
 }
 
 type StatusFilter = 'all' | Meeting['status'];
 
 const FILTER_IDS: StatusFilter[] = ['all', 'live', 'upcoming', 'completed'];
 
-export const MeetingsPage: React.FC<MeetingsPageProps> = ({ meetings, onMeetingClick, onNewMeeting, onUploadRecording }) => {
+export const MeetingsPage: React.FC<MeetingsPageProps> = ({ meetings, onMeetingClick, onNewMeeting, onUploadRecording, taskCountFor, onDeleteMeeting }) => {
   const [status, setStatus] = useState<StatusFilter>('all');
   const [query, setQuery] = useState('');
+  const [pendingDelete, setPendingDelete] = useState<Meeting | null>(null);
   const { t } = useI18n();
   const filterLabel = (id: StatusFilter) => (id === 'all' ? t.meetings.all : t.meetingStatus[id]);
 
@@ -39,6 +44,7 @@ export const MeetingsPage: React.FC<MeetingsPageProps> = ({ meetings, onMeetingC
   }, [meetings, status, query]);
 
   return (
+    <>
     <div className="space-y-6 animate-fade-up">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -78,7 +84,7 @@ export const MeetingsPage: React.FC<MeetingsPageProps> = ({ meetings, onMeetingC
               }`}
             >
               {filterLabel(id)}
-              <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-1.5 rounded-full">
+              <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 rounded-full">
                 {counts[id]}
               </span>
             </button>
@@ -86,7 +92,7 @@ export const MeetingsPage: React.FC<MeetingsPageProps> = ({ meetings, onMeetingC
         </div>
 
         <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -99,7 +105,7 @@ export const MeetingsPage: React.FC<MeetingsPageProps> = ({ meetings, onMeetingC
               type="button"
               onClick={() => setQuery('')}
               aria-label={t.meetings.clearSearch}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:bg-slate-100"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-500 hover:bg-slate-100"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -110,7 +116,12 @@ export const MeetingsPage: React.FC<MeetingsPageProps> = ({ meetings, onMeetingC
       {filtered.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filtered.map((m) => (
-            <MeetingCard key={m.id} meeting={m} onClick={() => onMeetingClick(m)} />
+            <MeetingCard
+              key={m.id}
+              meeting={m}
+              onClick={() => onMeetingClick(m)}
+              onDelete={onDeleteMeeting ? () => setPendingDelete(m) : undefined}
+            />
           ))}
         </div>
       ) : (
@@ -129,5 +140,18 @@ export const MeetingsPage: React.FC<MeetingsPageProps> = ({ meetings, onMeetingC
         </div>
       )}
     </div>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title={t.summary.deleteMeetingTitle}
+        message={t.summary.deleteMeetingMessage(pendingDelete ? taskCountFor(pendingDelete.id) : 0)}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={async () => {
+          const target = pendingDelete;
+          setPendingDelete(null);
+          if (target) await onDeleteMeeting?.(target);
+        }}
+      />
+    </>
   );
 };
