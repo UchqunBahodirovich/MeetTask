@@ -17,6 +17,15 @@ dist-ssr
 .env.*
 !.env.example
 
+# Firebase
+.firebase
+firebase-debug.log
+firebase-service-account*.json
+
+# Go
+meettask-api
+coverage.out
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -27,3 +36,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local Firestore emulator data (saved on exit, loaded on start)
+.emulator-data/
+firestore-debug.log
