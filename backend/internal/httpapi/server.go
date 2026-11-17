@@ -893,14 +893,24 @@ func (s *Server) recoverer(next http.Handler) http.Handler {
 	})
 }
 
+// refreshSameSite: with HTTPS (production) the frontend and API may live on
+// different sites (e.g. web.app + onrender.com), which requires SameSite=None.
+// None is only accepted together with Secure, so plain-HTTP local dev keeps Strict.
+func (s *Server) refreshSameSite() http.SameSite {
+	if s.Config.CookieSecure {
+		return http.SameSiteNoneMode
+	}
+	return http.SameSiteStrictMode
+}
+
 func (s *Server) setRefreshCookie(w http.ResponseWriter, value string, expires time.Time) {
 	http.SetCookie(w, &http.Cookie{Name: "meettask_refresh", Value: value, Path: "/api/auth", HttpOnly: true,
-		Secure: s.Config.CookieSecure, SameSite: http.SameSiteStrictMode, Expires: expires, MaxAge: int(time.Until(expires).Seconds())})
+		Secure: s.Config.CookieSecure, SameSite: s.refreshSameSite(), Expires: expires, MaxAge: int(time.Until(expires).Seconds())})
 }
 
 func (s *Server) clearRefreshCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{Name: "meettask_refresh", Path: "/api/auth", HttpOnly: true,
-		Secure: s.Config.CookieSecure, SameSite: http.SameSiteStrictMode, Expires: time.Unix(0, 0), MaxAge: -1})
+		Secure: s.Config.CookieSecure, SameSite: s.refreshSameSite(), Expires: time.Unix(0, 0), MaxAge: -1})
 }
 
 func (s *Server) sameWorkspace(w http.ResponseWriter, r *http.Request, workspaceID string) bool {
